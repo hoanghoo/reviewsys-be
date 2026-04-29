@@ -24,6 +24,18 @@ const User = sequelize.define('User', {
     type: DataTypes.ENUM('Admin', 'Manager', 'Employee'),
     defaultValue: 'Employee',
   },
+  rank: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  position: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  teamId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
   departmentId: {
     type: DataTypes.INTEGER,
     allowNull: true,
@@ -31,5 +43,7 @@ const User = sequelize.define('User', {
 }, {
   timestamps: true,
 });
+
+// Associations are defined in models/index.js
 
 module.exports = User;

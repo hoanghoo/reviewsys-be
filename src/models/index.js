@@ -4,16 +4,33 @@ const Department = require('./Department');
 const ReviewPeriod = require('./ReviewPeriod');
 const Template = require('./Template');
 const Review = require('./Review');
+const Team = require('./team');
 
-// Associations
+// === Associations ===
+
+// Department - User
 Department.hasMany(User, { foreignKey: 'departmentId' });
 User.belongsTo(Department, { foreignKey: 'departmentId' });
 
-User.hasMany(Review, { foreignKey: 'userId' });
-Review.belongsTo(User, { foreignKey: 'userId' });
+// Team - User
+Team.hasMany(User, { foreignKey: 'teamId' });
+User.belongsTo(Team, { foreignKey: 'teamId' });
 
+// ReviewPeriod - Review
 ReviewPeriod.hasMany(Review, { foreignKey: 'reviewPeriodId' });
 Review.belongsTo(ReviewPeriod, { foreignKey: 'reviewPeriodId' });
+
+// User - Review (as reviewer)
+User.hasMany(Review, { as: 'ReviewsGiven', foreignKey: 'reviewerId' });
+Review.belongsTo(User, { as: 'Reviewer', foreignKey: 'reviewerId' });
+
+// User - Review (as reviewee)
+User.hasMany(Review, { as: 'ReviewsReceived', foreignKey: 'revieweeId' });
+Review.belongsTo(User, { as: 'Reviewee', foreignKey: 'revieweeId' });
+
+// Template - Review
+Template.hasMany(Review, { foreignKey: 'templateId' });
+Review.belongsTo(Template, { foreignKey: 'templateId' });
 
 module.exports = {
   sequelize,
@@ -21,5 +38,6 @@ module.exports = {
   Department,
   ReviewPeriod,
   Template,
-  Review
+  Review,
+  Team
 };

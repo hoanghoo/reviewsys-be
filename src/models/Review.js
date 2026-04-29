@@ -7,29 +7,32 @@ const Review = sequelize.define('Review', {
     autoIncrement: true,
     primaryKey: true,
   },
-  userId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
   reviewPeriodId: {
     type: DataTypes.INTEGER,
     allowNull: false,
   },
-  selfScore: {
-    type: DataTypes.FLOAT,
+  reviewerId: {
+    type: DataTypes.INTEGER,
     allowNull: false,
-    defaultValue: 0,
   },
-  managerScore: {
-    type: DataTypes.FLOAT,
+  revieweeId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+  },
+  templateId: {
+    type: DataTypes.INTEGER,
     allowNull: true,
   },
   status: {
-    type: DataTypes.ENUM('Draft', 'Submitted', 'Approved', 'Rejected'),
+    type: DataTypes.ENUM('Draft', 'Submitted', 'Reviewed'),
     defaultValue: 'Draft',
   },
-  reviewData: {
-    type: DataTypes.JSON, // To store the form details
+  score: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  },
+  feedback: {
+    type: DataTypes.TEXT,
     allowNull: true,
   }
 }, {

@@ -2,9 +2,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.warn('WARNING: JWT_SECRET is not set in .env. Using fallback (unsafe for production).');
+}
+
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
 
     const user = await User.findOne({ where: { username } });
     if (!user) {
@@ -18,7 +27,7 @@ const login = async (req, res) => {
 
     const token = jwt.sign(
       { id: user.id, role: user.role },
-      process.env.JWT_SECRET || 'secret123',
+      JWT_SECRET || 'iprs-dev-secret-change-me',
       { expiresIn: 86400 } // 24 hours
     );
 
@@ -34,25 +43,4 @@ const login = async (req, res) => {
   }
 };
 
-const initAdmin = async (req, res) => {
-  try {
-    const count = await User.count();
-    if (count > 0) {
-      return res.status(400).json({ message: 'Admin already initialized' });
-    }
-    
-    const hashedPassword = bcrypt.hashSync('admin123', 8);
-    const admin = await User.create({
-      username: 'admin',
-      password: hashedPassword,
-      fullName: 'System Administrator',
-      role: 'Admin'
-    });
-
-    res.status(201).json({ message: 'Admin user created successfully', user: admin });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-module.exports = { login, initAdmin };
+module.exports = { login };
