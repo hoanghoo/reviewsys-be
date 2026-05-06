@@ -17,7 +17,7 @@ Team.hasMany(User, { foreignKey: 'teamId' });
 User.belongsTo(Team, { foreignKey: 'teamId' });
 
 // ReviewPeriod - Review
-ReviewPeriod.hasMany(Review, { foreignKey: 'reviewPeriodId' });
+ReviewPeriod.hasMany(Review, { as: 'Reviews', foreignKey: 'reviewPeriodId' });
 Review.belongsTo(ReviewPeriod, { foreignKey: 'reviewPeriodId' });
 
 // User - Review (as reviewer)
@@ -31,6 +31,10 @@ Review.belongsTo(User, { as: 'Reviewee', foreignKey: 'revieweeId' });
 // Template - Review
 Template.hasMany(Review, { foreignKey: 'templateId' });
 Review.belongsTo(Template, { foreignKey: 'templateId' });
+
+// Template - ReviewPeriod
+Template.hasMany(ReviewPeriod, { foreignKey: 'templateId' });
+ReviewPeriod.belongsTo(Template, { foreignKey: 'templateId' });
 
 module.exports = {
   sequelize,

@@ -22,6 +22,14 @@ const ReviewPeriod = sequelize.define('ReviewPeriod', {
   status: {
     type: DataTypes.ENUM('Open', 'Closed'),
     defaultValue: 'Open',
+  },
+  templateId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  teamIds: {
+    type: DataTypes.JSON,
+    allowNull: true,
   }
 }, {
   timestamps: true,

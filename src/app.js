@@ -6,6 +6,7 @@ const userRoutes = require('./routes/userRoutes');
 const reviewPeriodRoutes = require('./routes/reviewPeriodRoutes');
 const templateRoutes = require('./routes/templateRoutes');
 const teamRoutes = require('./routes/teamRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/review-periods', reviewPeriodRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/teams', teamRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Backend is running' });

@@ -5,9 +5,13 @@ const { verifyToken } = require('../middlewares/authMiddleware');
 const { authorizeRole } = require('../middlewares/roleMiddleware');
 
 router.use(verifyToken);
-router.use(authorizeRole('Admin'));
 
-router.get('/', reviewPeriodController.getAllReviewPeriods);
+// Accessible to all users (or Manager/Admin)
+router.get('/active', reviewPeriodController.getActiveReviewPeriod);
+router.get('/', authorizeRole('Admin', 'Manager'), reviewPeriodController.getAllReviewPeriods);
+
+// Admin only routes
+router.use(authorizeRole('Admin'));
 router.get('/:id', reviewPeriodController.getReviewPeriodById);
 router.post('/', reviewPeriodController.createReviewPeriod);
 router.put('/:id', reviewPeriodController.updateReviewPeriod);

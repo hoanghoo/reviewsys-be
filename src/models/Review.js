@@ -23,8 +23,12 @@ const Review = sequelize.define('Review', {
     type: DataTypes.INTEGER,
     allowNull: true,
   },
+  selfScore: {
+    type: DataTypes.FLOAT,
+    allowNull: true,
+  },
   status: {
-    type: DataTypes.ENUM('Draft', 'Submitted', 'Reviewed'),
+    type: DataTypes.ENUM('Draft', 'Submitted', 'ManagerReviewed', 'Completed'),
     defaultValue: 'Draft',
   },
   score: {

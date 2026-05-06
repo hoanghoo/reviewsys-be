@@ -1,4 +1,5 @@
 require('dotenv').config();
+console.log('JWT_SECRET loaded:', process.env.JWT_SECRET ? 'YES' : 'NO');
 const app = require('./src/app');
 const { sequelize } = require('./src/models');
 
