@@ -290,10 +290,37 @@ const getMyReviews = async (req, res) => {
   }
 };
 
+const htmlToDocx = require('html-to-docx');
+
+const exportDraftDocx = async (req, res) => {
+  try {
+    const { html } = req.body;
+    if (!html) {
+      return res.status(400).json({ message: 'Nội dung HTML không hợp lệ' });
+    }
+
+    const fileBuffer = await htmlToDocx(html, null, {
+      table: { row: { cantSplit: true } },
+      footer: true,
+      pageNumber: true,
+      margins: { top: 720, right: 720, bottom: 720, left: 720 } // 0.5 inch margins
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', 'attachment; filename="Ban_Danh_Gia.docx"');
+    
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('Error generating docx:', error);
+    res.status(500).json({ message: 'Lỗi server khi xuất file docx', error: error.message });
+  }
+};
+
 module.exports = { 
   submitPersonalReview,
   getTeamReviews,
   approveReview,
   exportTeamExcel,
+  exportDraftDocx,
   getMyReviews
 };

@@ -15,4 +15,6 @@ router.get('/team', authorizeRole('Manager', 'Admin'), reviewController.getTeamR
 router.put('/:id/approve', authorizeRole('Manager', 'Admin'), reviewController.approveReview);
 router.get('/export-excel', authorizeRole('Manager', 'Admin'), reviewController.exportTeamExcel);
 
+router.post('/export-draft-docx', authorizeRole('Employee', 'Manager', 'Admin'), reviewController.exportDraftDocx);
+
 module.exports = router;
