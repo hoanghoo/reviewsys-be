@@ -76,7 +76,20 @@ const getProfile = async (req, res) => {
       ]
     });
     if (!user) return res.status(404).json({ message: 'User not found' });
-    res.status(200).json(user);
+    
+    const userJSON = user.toJSON();
+    
+    if (user.teamId) {
+      const manager = await User.findOne({
+        where: { teamId: user.teamId, role: 'Manager' },
+        attributes: ['fullName']
+      });
+      if (manager) {
+        userJSON.managerName = manager.fullName;
+      }
+    }
+    
+    res.status(200).json(userJSON);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
