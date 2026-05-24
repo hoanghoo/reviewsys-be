@@ -1,4 +1,5 @@
-const { User, Department, Team } = require('../models');
+const { User, Department, Team, sequelize } = require('../models');
+const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 
 const getAllUsers = async (req, res) => {
@@ -19,6 +20,15 @@ const getAllUsers = async (req, res) => {
 const createUser = async (req, res) => {
   try {
     const { username, password, fullName, role, departmentId, rank, position, teamId } = req.body;
+    
+    // Enforce 1 Commander, 1 Deputy Rule
+    if (teamId && (position === 'Đội trưởng' || position === 'Phó đội trưởng')) {
+      const existing = await User.findOne({ where: { teamId, position } });
+      if (existing) {
+        return res.status(400).json({ message: `Đội này đã có ${position} (${existing.fullName})` });
+      }
+    }
+
     const hashedPassword = bcrypt.hashSync(password, 8);
     const user = await User.create({
       username, password: hashedPassword, fullName, role, departmentId, rank, position, teamId
@@ -39,6 +49,20 @@ const updateUser = async (req, res) => {
 
     const { fullName, role, departmentId, password, rank, position, teamId } = req.body;
     
+    // Enforce 1 Commander, 1 Deputy Rule
+    if (teamId && (position === 'Đội trưởng' || position === 'Phó đội trưởng')) {
+      const existing = await User.findOne({ 
+        where: { 
+          teamId, 
+          position,
+          id: { [Op.ne]: user.id } // Exclude current user
+        } 
+      });
+      if (existing) {
+        return res.status(400).json({ message: `Đội này đã có ${position} (${existing.fullName})` });
+      }
+    }
+
     const updateData = { fullName, role, departmentId, rank, position, teamId };
     if (password) {
       updateData.password = bcrypt.hashSync(password, 8);
@@ -80,10 +104,27 @@ const getProfile = async (req, res) => {
     const userJSON = user.toJSON();
     
     if (user.teamId) {
-      const manager = await User.findOne({
-        where: { teamId: user.teamId, role: 'Manager' },
+      // Prioritize Đội trưởng over Phó đội trưởng
+      let manager = await User.findOne({
+        where: { teamId: user.teamId, position: 'Đội trưởng' },
         attributes: ['fullName']
       });
+
+      if (!manager) {
+        manager = await User.findOne({
+          where: { teamId: user.teamId, position: 'Phó đội trưởng' },
+          attributes: ['fullName']
+        });
+      }
+
+      // Fallback to any Manager if no specific position found
+      if (!manager) {
+        manager = await User.findOne({
+          where: { teamId: user.teamId, role: 'Manager' },
+          attributes: ['fullName']
+        });
+      }
+
       if (manager) {
         userJSON.managerName = manager.fullName;
       }
@@ -116,4 +157,31 @@ const changePassword = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, createUser, updateUser, deleteUser, getProfile, changePassword };
+const getTeamUsers = async (req, res) => {
+  try {
+    const { search } = req.query;
+    const currentUser = await User.findByPk(req.user.id);
+
+    let where = {};
+    if (currentUser.role === 'Manager') {
+      where.teamId = currentUser.teamId;
+    }
+
+    if (search) {
+      where.fullName = { [Op.substring]: search };
+    }
+
+    const users = await User.findAll({
+      where,
+      attributes: { exclude: ['password'] },
+      include: [
+        { model: Team, attributes: ['id', 'shortName', 'fullName'] }
+      ]
+    });
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { getAllUsers, createUser, updateUser, deleteUser, getProfile, changePassword, getTeamUsers };

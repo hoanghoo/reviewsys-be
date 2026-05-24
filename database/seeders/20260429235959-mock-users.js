@@ -31,7 +31,7 @@ const ranks = ['Thiếu úy', 'Trung úy', 'Thượng úy', 'Đại úy', 'Thi�
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     const [departments] = await queryInterface.sequelize.query(
-      `SELECT id FROM Departments WHERE name='Phòng an ninh mạng và PCTP sử dụng công nghệ cao' LIMIT 1;`
+      `SELECT id FROM "Departments" WHERE name='Phòng an ninh mạng và PCTP sử dụng công nghệ cao' LIMIT 1;`
     );
     const deptId = departments.length > 0 ? departments[0].id : null;
 
@@ -47,7 +47,7 @@ module.exports = {
       }], { ignoreDuplicates: true });
     }
 
-    const [dbTeams] = await queryInterface.sequelize.query(`SELECT id, shortName FROM Teams;`);
+    const [dbTeams] = await queryInterface.sequelize.query(`SELECT id, "shortName" FROM "Teams";`);
     const teamIdMap = {};
     dbTeams.forEach(t => teamIdMap[t.shortName] = t.id);
 

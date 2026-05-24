@@ -17,7 +17,7 @@ module.exports = {
 
     // Retrieve the department ID
     const [departments] = await queryInterface.sequelize.query(
-      `SELECT id FROM Departments WHERE name='Phòng an ninh mạng và PCTP sử dụng công nghệ cao' LIMIT 1;`
+      `SELECT id FROM "Departments" WHERE name='Phòng an ninh mạng và PCTP sử dụng công nghệ cao' LIMIT 1;`
     );
     const deptId = departments.length > 0 ? departments[0].id : null;
 

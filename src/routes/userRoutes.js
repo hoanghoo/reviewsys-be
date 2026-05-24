@@ -6,6 +6,7 @@ const { authorizeRole } = require('../middlewares/roleMiddleware');
 
 router.use(verifyToken);
 router.get('/profile', userController.getProfile);
+router.get('/team', userController.getTeamUsers);
 router.post('/change-password', userController.changePassword);
 
 // Admin only routes

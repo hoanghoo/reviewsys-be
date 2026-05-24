@@ -28,11 +28,13 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({ 
-  storage: storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: fileFilter
 });
 
+// We don't need a separate memory upload anymore since we use it directly above
+// But keep uploadMemory if it's used elsewhere
 const uploadMemory = multer({ 
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -50,7 +52,7 @@ const uploadTemplate = async (req, res) => {
     const template = await Template.create({
       name,
       type: 'Word', // always Word now
-      filePath: req.file.path
+      fileData: req.file.buffer.toString('base64')
     });
 
     res.status(201).json(template);
@@ -140,8 +142,8 @@ const convertDocxToHtml = async (source) => {
         scoreCell.attr('rowspan', rowspan);
         noteCell.attr('rowspan', rowspan);
 
-        scoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${myId}" data-parent-id="${myParentId}" />`);
-        noteCell.html(`<input type="text" class="note-input" />`);
+        scoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${myId}" data-parent-id="${myParentId}" data-row-index="${i}" />`);
+        noteCell.html(`<input type="text" class="note-input" data-row-index="${i}" />`);
 
         for (let j = 1; j < rowspan; j++) {
           const nextRow = $(rows[i + j]);
@@ -160,8 +162,8 @@ const convertDocxToHtml = async (source) => {
         const parentScoreCell = $(cells[cells.length - 2]);
         const parentNoteCell = $(cells[cells.length - 1]);
         
-        parentScoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${myId}" data-parent-id="${myParentId}" readonly placeholder="..." />`);
-        parentNoteCell.html(`<input type="text" class="note-input" />`);
+        parentScoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${myId}" data-parent-id="${myParentId}" readonly placeholder="..." data-row-index="${i}" />`);
+        parentNoteCell.html(`<input type="text" class="note-input" data-row-index="${i}" />`);
 
         let currentSubParentId = null;
 
@@ -193,8 +195,8 @@ const convertDocxToHtml = async (source) => {
 
               const childScoreCell = $(nextCells[nextCells.length - 2]);
               const childNoteCell = $(nextCells[nextCells.length - 1]);
-              childScoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${childId}" data-parent-id="${childParentId}" />`);
-              childNoteCell.html('<input type="text" class="note-input" />');
+              childScoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${childId}" data-parent-id="${childParentId}" data-row-index="${i + j}" />`);
+              childNoteCell.html(`<input type="text" class="note-input" data-row-index="${i + j}" />`);
             }
           }
         }
@@ -208,8 +210,8 @@ const convertDocxToHtml = async (source) => {
     const scoreCell = $(cells[cells.length - 2]);
     const noteCell = $(cells[cells.length - 1]);
     
-    scoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${myId}" data-parent-id="${myParentId}" />`);
-    noteCell.html(`<input type="text" class="note-input" />`);
+    scoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${myId}" data-parent-id="${myParentId}" data-row-index="${i}" />`);
+    noteCell.html(`<input type="text" class="note-input" data-row-index="${i}" />`);
   }
 
   // After generating all inputs, we can make any input that has children readonly
@@ -240,11 +242,20 @@ const previewTemplateById = async (req, res) => {
     const template = await Template.findByPk(req.params.id);
     if (!template) return res.status(404).json({ message: 'Template not found' });
 
-    if (!fs.existsSync(template.filePath)) {
+    if (!template.fileData && !template.filePath) {
+      return res.status(404).json({ message: 'Template data is missing' });
+    }
+
+    let source;
+    if (template.fileData) {
+      source = { buffer: Buffer.from(template.fileData, 'base64') };
+    } else if (template.filePath && fs.existsSync(template.filePath)) {
+      source = { path: template.filePath }; // Legacy fallback
+    } else {
       return res.status(404).json({ message: 'File template không tồn tại trên máy chủ' });
     }
 
-    const html = await convertDocxToHtml({ path: template.filePath });
+    const html = await convertDocxToHtml(source);
 
     res.status(200).json({
       html: html,
@@ -258,7 +269,9 @@ const previewTemplateById = async (req, res) => {
 
 const getAllTemplates = async (req, res) => {
   try {
-    const templates = await Template.findAll();
+    const templates = await Template.findAll({
+      attributes: { exclude: ['fileData'] } // Don't send huge base64 string when listing templates
+    });
     res.status(200).json(templates);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -270,8 +283,8 @@ const deleteTemplate = async (req, res) => {
     const template = await Template.findByPk(req.params.id);
     if (!template) return res.status(404).json({ message: 'Template not found' });
 
-    if (fs.existsSync(template.filePath)) {
-      fs.unlinkSync(template.filePath);
+    if (template.filePath && fs.existsSync(template.filePath)) {
+      fs.unlinkSync(template.filePath); // Legacy cleanup
     }
     
     await template.destroy();

@@ -17,7 +17,11 @@ const Template = sequelize.define('Template', {
   },
   filePath: {
     type: DataTypes.STRING,
-    allowNull: false,
+    allowNull: true,
+  },
+  fileData: {
+    type: DataTypes.TEXT('long'),
+    allowNull: true,
   }
 }, {
   timestamps: true,

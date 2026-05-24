@@ -2,3 +2,9 @@ node_modules/
 .env
 npm-debug.log
 .DS_Store
+server.log
+scratch-*.js
+migrate-to-supabase.js
+storage/templates/*.docx
+!storage/templates/.gitkeep
+dist/

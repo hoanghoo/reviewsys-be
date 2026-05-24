@@ -28,7 +28,7 @@ const Review = sequelize.define('Review', {
     allowNull: true,
   },
   status: {
-    type: DataTypes.ENUM('Draft', 'Submitted', 'ManagerReviewed', 'Completed'),
+    type: DataTypes.ENUM('Draft', 'Submitted', 'ManagerReviewed', 'Reviewed', 'Completed'),
     defaultValue: 'Draft',
   },
   score: {
