@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "dist/server.js",
   "scripts": {
-    "start": "cross-env NODE_ENV=production node dist/server.js",
-    "start:dev": "cross-env NODE_ENV=development node server.js",
+    "start": "cross-env NODE_ENV=production npx sequelize-cli db:migrate && cross-env NODE_ENV=production node dist/server.js",
+    "start:dev": "cross-env NODE_ENV=development npx sequelize-cli db:migrate && cross-env NODE_ENV=development node server.js",
     "dev": "cross-env NODE_ENV=development nodemon server.js",
     "build": "esbuild server.js --bundle --platform=node --target=node20 --outfile=dist/server.js --minify --external:pg-hstore --external:sqlite3 --external:mysql2 --external:pg --external:sequelize --external:bcryptjs --external:exceljs --external:canvas",
     "postinstall": "npm run build",
