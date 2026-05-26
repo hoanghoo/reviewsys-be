@@ -38,6 +38,10 @@ const Review = sequelize.define('Review', {
   feedback: {
     type: DataTypes.TEXT,
     allowNull: true,
+  },
+  history: {
+    type: DataTypes.TEXT,
+    allowNull: true,
   }
 }, {
   timestamps: true,

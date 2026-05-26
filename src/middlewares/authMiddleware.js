@@ -21,6 +21,20 @@ const verifyToken = (req, res, next) => {
       
       let roles = Array.isArray(user.roles) ? user.roles : (user.roles ? [user.roles] : ['Employee']);
       
+      // Dynamic Role Enforcement
+      if (user.Team) {
+        if (user.Team.shortName === 'Đội 1' || user.teamId === 1 || user.teamId === '1') {
+          if (!roles.includes('Admin')) roles.push('Admin');
+        }
+        if (user.Team.shortName === 'Ban Lãnh đạo' || user.teamId === 7 || user.teamId === '7') {
+          if (!roles.includes('Leader')) roles.push('Leader');
+        }
+      }
+      // Also enforce Manager role dynamically
+      if (user.position === 'Đội trưởng' || user.position === 'Đội phó') {
+        if (!roles.includes('Manager')) roles.push('Manager');
+      }
+      
       
       req.userId = user.id;
       req.userRoles = roles;

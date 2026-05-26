@@ -10,11 +10,11 @@ router.use(verifyToken);
 router.post('/submit-personal', reviewController.submitPersonalReview);
 router.get('/my-reviews', reviewController.getMyReviews);
 
-// Manager routes
-router.get('/team', authorizeRole('Manager', 'Admin'), reviewController.getTeamReviews);
-router.put('/:id/approve', authorizeRole('Manager', 'Admin'), reviewController.approveReview);
-router.get('/export-excel', authorizeRole('Manager', 'Admin'), reviewController.exportTeamExcel);
+// Manager, Leader & Admin routes
+router.get('/team', authorizeRole('Leader', 'Manager', 'Admin'), reviewController.getTeamReviews);
+router.put('/:id/approve', authorizeRole('Leader', 'Manager', 'Admin'), reviewController.approveReview);
+router.get('/export-excel', authorizeRole('Leader', 'Manager', 'Admin'), reviewController.exportTeamExcel);
 
-router.post('/export-draft-docx', authorizeRole('Employee', 'Manager', 'Admin'), reviewController.exportDraftDocx);
+router.post('/export-draft-docx', authorizeRole('Employee', 'Leader', 'Manager', 'Admin'), reviewController.exportDraftDocx);
 
 module.exports = router;

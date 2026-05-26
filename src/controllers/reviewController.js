@@ -14,19 +14,35 @@ const submitPersonalReview = async (req, res) => {
       return res.status(400).json({ message: 'Kỳ đánh giá này không khả dụng hoặc đã đóng' });
     }
 
+    const user = await User.findByPk(userId);
+    
     // Check if already submitted
     const existingReview = await Review.findOne({
       where: { reviewPeriodId, reviewerId: userId, revieweeId: userId }
     });
 
+    const newHistoryEntry = {
+      action: 'Submitted',
+      user: user ? user.fullName : 'Hệ thống',
+      role: 'Cán bộ',
+      date: new Date().toISOString()
+    };
+
     if (existingReview) {
+      let historyArr = [];
+      if (existingReview.history) {
+        try { historyArr = JSON.parse(existingReview.history); } catch(e) {}
+      }
+      historyArr.push(newHistoryEntry);
+
       // Update existing
       await existingReview.update({
         templateId,
         feedback: JSON.stringify(feedback),
         score,
         selfScore: score,
-        status: 'Submitted'
+        status: 'Submitted',
+        history: JSON.stringify(historyArr)
       });
       return res.status(200).json(existingReview);
     } else {
@@ -39,7 +55,8 @@ const submitPersonalReview = async (req, res) => {
         feedback: JSON.stringify(feedback),
         score,
         selfScore: score,
-        status: 'Submitted'
+        status: 'Submitted',
+        history: JSON.stringify([newHistoryEntry])
       });
       return res.status(201).json(review);
     }
@@ -59,14 +76,12 @@ const getTeamReviews = async (req, res) => {
       return res.status(400).json({ message: 'Không tìm thấy kỳ đánh giá' });
     }
 
-    if (!manager || (!manager.roles.includes("Manager") && !manager.roles.includes("Admin"))) {
+    if (!manager || (!manager.roles.includes("Manager") && !manager.roles.includes("Admin") && !manager.roles.includes("Leader"))) {
       return res.status(403).json({ message: 'Không có quyền truy cập' });
     }
 
     const { Op } = require('sequelize');
-    let userWhere = { 
-      role: { [Op.in]: ['Employee', 'Manager', 'Admin'] } // Include all roles for testing/tracking
-    };
+    let userWhere = {};
 
     // If period is scoped to multiple teams
     if (Array.isArray(period.teamIds) && period.teamIds.length > 0) {
@@ -112,7 +127,11 @@ const getTeamReviews = async (req, res) => {
 
     let reviewWhere = { reviewPeriodId: periodId };
     if (status) {
-      reviewWhere.status = status;
+      if (status === 'Reviewed' || status === 'Completed') {
+        reviewWhere.status = { [Op.in]: ['Reviewed', 'Completed'] };
+      } else {
+        reviewWhere.status = status;
+      }
     }
 
     console.log('Fetching team reviews with params:', { periodId, departmentId, status, page, limit });
@@ -200,10 +219,27 @@ const approveReview = async (req, res) => {
       return res.status(403).json({ message: 'Không có quyền duyệt bản đánh giá này' });
     }
 
+    const newStatus = status || 'ManagerReviewed';
+    let historyArr = [];
+    if (review.history) {
+      try {
+        historyArr = JSON.parse(review.history);
+      } catch (e) {
+        historyArr = [];
+      }
+    }
+    historyArr.push({
+      action: newStatus,
+      user: manager.fullName,
+      role: manager.roles.includes('Leader') ? 'Lãnh đạo' : 'Chỉ huy',
+      date: new Date().toISOString()
+    });
+
     await review.update({
-      status: status || 'ManagerReviewed', // Default to next step
+      status: newStatus,
       score: score !== undefined ? score : review.score,
-      feedback: feedback ? (typeof feedback === 'string' ? feedback : JSON.stringify(feedback)) : review.feedback
+      feedback: feedback ? (typeof feedback === 'string' ? feedback : JSON.stringify(feedback)) : review.feedback,
+      history: JSON.stringify(historyArr)
     });
 
     res.status(200).json(review);
@@ -249,7 +285,7 @@ const exportTeamExcel = async (req, res) => {
           userWhere.departmentId = manager.departmentId;
         }
       }
-    } else if (manager.roles.includes("Admin")) {
+    } else if (manager.roles.includes("Admin") || manager.roles.includes("Leader")) {
       if (teamId && teamId !== 'all') {
         userWhere.teamId = teamId;
       }
@@ -343,21 +379,8 @@ const exportTeamExcel = async (req, res) => {
       const dataRowCount = sigRow ? sigRow - 7 : 5;
       
       const rowsToInsert = members.length > dataRowCount ? members.length - dataRowCount : 0;
-      const shiftRows = rowsToInsert;
-      
-      let mergesToShift = [];
-      if (shiftRows > 0) {
-        const oldMerges = Object.values(worksheet._merges || {}).map(m => m.model);
-        oldMerges.forEach(m => {
-            if (m.top > 6 + dataRowCount - 1) {
-              worksheet.unMergeCells(m.top, m.left, m.bottom, m.right);
-              mergesToShift.push(m);
-            }
-        });
-        
-        for(let i=0; i<shiftRows; i++) {
-           worksheet.insertRow(6 + dataRowCount + i, []);
-        }
+      if (rowsToInsert > 0) {
+        worksheet.duplicateRow(6 + dataRowCount - 1, rowsToInsert, true);
       }
 
       members.forEach((member, index) => {
@@ -365,17 +388,6 @@ const exportTeamExcel = async (req, res) => {
         const row = worksheet.getRow(rowIndex);
         row.height = 19;
         
-        if (index >= dataRowCount) {
-           styles.forEach((styleObj, colNumber) => {
-             if (!styleObj) return;
-             const cell = row.getCell(colNumber);
-             cell.style = Object.assign({}, styleObj.style);
-             cell.border = Object.assign({}, styleObj.border);
-             cell.font = Object.assign({}, styleObj.font);
-             cell.alignment = Object.assign({}, styleObj.alignment);
-           });
-        }
-
         row.getCell(1).value = index + 1;
         row.getCell(2).value = member.fullName;
         
@@ -412,10 +424,6 @@ const exportTeamExcel = async (req, res) => {
             });
          }
       }
-
-      mergesToShift.forEach(m => {
-          worksheet.mergeCells(m.top + shiftRows, m.left, m.bottom + shiftRows, m.right);
-      });
 
       let foundRow = null;
       let foundCol = 7;
@@ -481,21 +489,8 @@ const exportTeamExcel = async (req, res) => {
       const dataRowCount = sigRow ? sigRow - 7 : 5;
       
       const rowsToInsert = members.length > dataRowCount ? members.length - dataRowCount : 0;
-      const shiftRows = rowsToInsert;
-
-      let mergesToShift = [];
-      if (shiftRows > 0) {
-        const oldMerges = Object.values(namSheet._merges || {}).map(m => m.model);
-        oldMerges.forEach(m => {
-            if (m.top > 6 + dataRowCount - 1) {
-              namSheet.unMergeCells(m.top, m.left, m.bottom, m.right);
-              mergesToShift.push(m);
-            }
-        });
-        
-        for(let i=0; i<shiftRows; i++) {
-           namSheet.insertRow(6 + dataRowCount + i, []);
-        }
+      if (rowsToInsert > 0) {
+        namSheet.duplicateRow(6 + dataRowCount - 1, rowsToInsert, true);
       }
 
       members.forEach((member, index) => {
@@ -503,17 +498,6 @@ const exportTeamExcel = async (req, res) => {
         const row = namSheet.getRow(rowIndex);
         row.height = 19;
         
-        if (index >= dataRowCount) {
-           styles.forEach((styleObj, colNumber) => {
-             if (!styleObj) return;
-             const cell = row.getCell(colNumber);
-             cell.style = Object.assign({}, styleObj.style);
-             cell.border = Object.assign({}, styleObj.border);
-             cell.font = Object.assign({}, styleObj.font);
-             cell.alignment = Object.assign({}, styleObj.alignment);
-           });
-        }
-
         row.getCell(1).value = index + 1;
         row.getCell(2).value = member.fullName;
         
@@ -536,10 +520,6 @@ const exportTeamExcel = async (req, res) => {
             });
          }
       }
-
-      mergesToShift.forEach(m => {
-          namSheet.mergeCells(m.top + shiftRows, m.left, m.bottom + shiftRows, m.right);
-      });
 
       let foundRow = null;
       let foundCol = 12;

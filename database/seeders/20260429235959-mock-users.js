@@ -83,7 +83,7 @@ module.exports = {
         role = 'Manager';
         rank = ranks[Math.floor(Math.random() * 2) + 4]; // Thiếu tá, Trung tá
       } else if (rand > 0.88) {
-        position = 'Phó đội trưởng';
+        position = 'Đội phó';
         role = 'Manager';
         rank = ranks[Math.floor(Math.random() * 2) + 3]; // Đại úy, Thiếu tá
       } else if (rand > 0.86) {

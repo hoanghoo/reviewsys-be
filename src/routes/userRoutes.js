@@ -9,8 +9,8 @@ router.get('/profile', userController.getProfile);
 router.get('/team', userController.getTeamUsers);
 router.post('/change-password', userController.changePassword);
 
-// Admin only routes
-router.use(authorizeRole('Admin'));
+// Admin & Leader routes
+router.use(authorizeRole('Admin', 'Leader'));
 router.get('/import-template', userController.importTemplate);
 router.post('/import-preview', userController.uploadMemory.single('file'), userController.importPreview);
 router.post('/import-submit', userController.importSubmit);
