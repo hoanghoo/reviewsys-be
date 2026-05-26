@@ -2,6 +2,31 @@ const { User, Department, Team, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 
+
+const calculateRoles = (inputRoles, position, teamId, isLeadershipTeam) => {
+  const rolesSet = new Set(Array.isArray(inputRoles) ? inputRoles : [inputRoles || "Employee"]);
+  
+  // Everyone should probably be at least Employee unless strictly only Admin
+  if (rolesSet.size === 0) rolesSet.add("Employee");
+
+  // 1. Nếu thuộc ban lãnh đạo => role: lãnh đạo
+  if (isLeadershipTeam) {
+    rolesSet.add("Leader");
+  }
+
+  // 2. Nếu là đội trưởng/đội phó => chỉ huy đội (Manager)
+  if (position === 'Đội trưởng' || position === 'Phó đội trưởng' || position === 'Đội phó') {
+    rolesSet.add("Manager");
+  }
+
+  // 3. Nếu thuộc đội 1 => thêm role: quản trị viên vào role hiện có
+  if (teamId === 1 || teamId === '1') {
+    rolesSet.add("Admin");
+  }
+
+  return Array.from(rolesSet);
+};
+
 const getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll({
@@ -70,17 +95,13 @@ const createUser = async (req, res) => {
     }
 
     const hashedPassword = bcrypt.hashSync(password, 8);
-    const dbRoles = Array.isArray(req.body.roles) ? req.body.roles : [req.body.role || "Employee"];
+    const dbRoles = calculateRoles(req.body.roles, position, teamId, isLeadershipTeam);
     const user = await User.create({
       username, password: hashedPassword, fullName, roles: dbRoles, departmentId, rank, position, teamId, managedTeamIds
     });
     
     const userWithoutPassword = user.toJSON();
-    if (userWithoutPassword.teamId === 1) {
-      if (!userWithoutPassword.roles) userWithoutPassword.roles = []; if (!userWithoutPassword.roles.includes("Admin")) userWithoutPassword.roles.push("Admin");
-    } else if (userWithoutPassword.teamId === 7) {
-      if (!userWithoutPassword.roles) userWithoutPassword.roles = []; if (!userWithoutPassword.roles.includes("Leader")) userWithoutPassword.roles.push("Leader");
-    }
+
     delete userWithoutPassword.password;
     res.status(201).json(userWithoutPassword);
   } catch (error) {
@@ -140,7 +161,7 @@ const updateUser = async (req, res) => {
       }
     }
 
-    const dbRoles = Array.isArray(req.body.roles) ? req.body.roles : [req.body.role || "Employee"];
+    const dbRoles = calculateRoles(req.body.roles, position, teamId, isLeadershipTeam);
     const updateData = { fullName, roles: dbRoles, departmentId, rank, position, teamId, managedTeamIds };
     if (password) {
       updateData.password = bcrypt.hashSync(password, 8);
@@ -584,12 +605,7 @@ const importSubmit = async (req, res) => {
 
       const hashedPassword = bcrypt.hashSync(u.password, 8);
 
-      let roles = ["Employee"];
-      if (u.position === 'Đội trưởng' || u.position === 'Phó đội trưởng') {
-        roles.push("Manager");
-      } else if (u.position === 'Trưởng phòng' || u.position === 'Phó phòng') {
-        roles.push("Leader");
-      }
+      let roles = calculateRoles(["Employee"], u.position, u.teamId, u.teamName === 'Ban Lãnh đạo');
 
       const newUser = await User.create({
         username: finalUsername,
