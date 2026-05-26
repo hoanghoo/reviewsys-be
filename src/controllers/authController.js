@@ -28,15 +28,12 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid Password' });
     }
 
-    let role = user.role;
-    if (user.teamId === 1) {
-      role = 'Admin';
-    } else if (user.teamId === 7 || (user.Team && user.Team.shortName === 'Ban Lãnh đạo')) {
-      role = 'Leader';
-    }
+    let roles = Array.isArray(user.roles) ? user.roles : (user.roles ? [user.roles] : ['Employee']);
+    
+    
 
     const token = jwt.sign(
-      { id: user.id, role: role },
+      { id: user.id, roles: roles },
       JWT_SECRET || 'iprs-dev-secret-change-me',
       { expiresIn: 86400 } // 24 hours
     );
@@ -45,7 +42,8 @@ const login = async (req, res) => {
       id: user.id,
       username: user.username,
       fullName: user.fullName,
-      role: role,
+      roles: roles,
+      role: roles[0] || 'Employee', // Provide primary role for backward compatibility in some places
       accessToken: token
     });
   } catch (error) {

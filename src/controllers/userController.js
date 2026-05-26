@@ -14,9 +14,9 @@ const getAllUsers = async (req, res) => {
     const usersJSON = users.map(u => {
       const json = u.toJSON();
       if (json.teamId === 1) {
-        json.role = 'Admin';
+        if (!json.roles) json.roles = []; if (!json.roles.includes("Admin")) json.roles.push("Admin");
       } else if (json.teamId === 7 || (u.Team && u.Team.shortName === 'Ban Lãnh đạo')) {
-        json.role = 'Leader';
+        if (!json.roles) json.roles = []; if (!json.roles.includes("Leader")) json.roles.push("Leader");
       }
       return json;
     });
@@ -70,16 +70,16 @@ const createUser = async (req, res) => {
     }
 
     const hashedPassword = bcrypt.hashSync(password, 8);
-    const dbRole = role === 'Leader' ? 'Employee' : role;
+    const dbRoles = Array.isArray(req.body.roles) ? req.body.roles : [req.body.role || "Employee"];
     const user = await User.create({
-      username, password: hashedPassword, fullName, role: dbRole, departmentId, rank, position, teamId, managedTeamIds
+      username, password: hashedPassword, fullName, roles: dbRoles, departmentId, rank, position, teamId, managedTeamIds
     });
     
     const userWithoutPassword = user.toJSON();
     if (userWithoutPassword.teamId === 1) {
-      userWithoutPassword.role = 'Admin';
+      if (!userWithoutPassword.roles) userWithoutPassword.roles = []; if (!userWithoutPassword.roles.includes("Admin")) userWithoutPassword.roles.push("Admin");
     } else if (userWithoutPassword.teamId === 7) {
-      userWithoutPassword.role = 'Leader';
+      if (!userWithoutPassword.roles) userWithoutPassword.roles = []; if (!userWithoutPassword.roles.includes("Leader")) userWithoutPassword.roles.push("Leader");
     }
     delete userWithoutPassword.password;
     res.status(201).json(userWithoutPassword);
@@ -140,8 +140,8 @@ const updateUser = async (req, res) => {
       }
     }
 
-    const dbRole = role === 'Leader' ? 'Employee' : role;
-    const updateData = { fullName, role: dbRole, departmentId, rank, position, teamId, managedTeamIds };
+    const dbRoles = Array.isArray(req.body.roles) ? req.body.roles : [req.body.role || "Employee"];
+    const updateData = { fullName, roles: dbRoles, departmentId, rank, position, teamId, managedTeamIds };
     if (password) {
       updateData.password = bcrypt.hashSync(password, 8);
     }
@@ -150,9 +150,9 @@ const updateUser = async (req, res) => {
     
     const userWithoutPassword = user.toJSON();
     if (userWithoutPassword.teamId === 1) {
-      userWithoutPassword.role = 'Admin';
+      if (!userWithoutPassword.roles) userWithoutPassword.roles = []; if (!userWithoutPassword.roles.includes("Admin")) userWithoutPassword.roles.push("Admin");
     } else if (userWithoutPassword.teamId === 7) {
-      userWithoutPassword.role = 'Leader';
+      if (!userWithoutPassword.roles) userWithoutPassword.roles = []; if (!userWithoutPassword.roles.includes("Leader")) userWithoutPassword.roles.push("Leader");
     }
     delete userWithoutPassword.password;
     res.status(200).json(userWithoutPassword);
@@ -186,9 +186,9 @@ const getProfile = async (req, res) => {
     
     const userJSON = user.toJSON();
     if (user.teamId === 1) {
-      userJSON.role = 'Admin';
+      if (!userJSON.roles) userJSON.roles = []; if (!userJSON.roles.includes("Admin")) userJSON.roles.push("Admin");
     } else if (user.teamId === 7 || (user.Team && user.Team.shortName === 'Ban Lãnh đạo')) {
-      userJSON.role = 'Leader';
+      if (!userJSON.roles) userJSON.roles = []; if (!userJSON.roles.includes("Leader")) userJSON.roles.push("Leader");
     }
     
     if (user.teamId) {
@@ -251,7 +251,7 @@ const getTeamUsers = async (req, res) => {
     const currentUser = await User.findByPk(req.user.id);
 
     let where = {};
-    if (currentUser.role === 'Manager') {
+    if (currentUser.roles && currentUser.roles.includes("Manager")) {
       where.teamId = currentUser.teamId;
     }
 
@@ -584,18 +584,18 @@ const importSubmit = async (req, res) => {
 
       const hashedPassword = bcrypt.hashSync(u.password, 8);
 
-      let role = 'Employee';
+      let roles = ["Employee"];
       if (u.position === 'Đội trưởng' || u.position === 'Phó đội trưởng') {
-        role = 'Manager';
+        roles.push("Manager");
       } else if (u.position === 'Trưởng phòng' || u.position === 'Phó phòng') {
-        role = 'Leader';
+        roles.push("Leader");
       }
 
       const newUser = await User.create({
         username: finalUsername,
         password: hashedPassword,
         fullName: u.fullName,
-        role: role === 'Leader' ? 'Employee' : role, // Map Leader to Employee in DB
+        roles: roles, // Map Leader to Employee in DB
         departmentId: deptId,
         rank: u.rank,
         position: u.position,

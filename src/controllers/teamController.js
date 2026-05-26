@@ -53,7 +53,7 @@ exports.assignLeader = async (req, res) => {
 
       for (const u of users) {
         await User.update(
-          { position: u.position, role: u.role },
+          { position: u.position, roles: u.roles },
           { where: { id: u.id, teamId: id } }
         );
       }

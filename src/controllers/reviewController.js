@@ -59,7 +59,7 @@ const getTeamReviews = async (req, res) => {
       return res.status(400).json({ message: 'Không tìm thấy kỳ đánh giá' });
     }
 
-    if (!manager || (manager.role !== 'Manager' && manager.role !== 'Admin')) {
+    if (!manager || (!manager.roles.includes("Manager") && !manager.roles.includes("Admin"))) {
       return res.status(403).json({ message: 'Không có quyền truy cập' });
     }
 
@@ -79,7 +79,7 @@ const getTeamReviews = async (req, res) => {
     }
 
     // Filter by Team/Dept
-    if (manager.role === 'Manager') {
+    if (manager.roles.includes("Manager")) {
       if (manager.position === 'Trưởng phòng') {
         if (teamId && teamId !== 'all') {
           userWhere.teamId = teamId;
@@ -196,7 +196,7 @@ const approveReview = async (req, res) => {
     const manager = await User.findByPk(req.user.id);
     const reviewee = await User.findByPk(review.revieweeId);
 
-    if (manager.role !== 'Admin' && manager.departmentId !== reviewee.departmentId) {
+    if (!manager.roles.includes("Admin") && manager.departmentId !== reviewee.departmentId) {
       return res.status(403).json({ message: 'Không có quyền duyệt bản đánh giá này' });
     }
 
@@ -226,7 +226,7 @@ const exportTeamExcel = async (req, res) => {
     }
 
     let userWhere = {};
-    if (manager.role === 'Manager') {
+    if (manager.roles.includes("Manager")) {
       if (manager.position === 'Trưởng phòng') {
         if (teamId && teamId !== 'all') {
           userWhere.teamId = teamId;
@@ -249,7 +249,7 @@ const exportTeamExcel = async (req, res) => {
           userWhere.departmentId = manager.departmentId;
         }
       }
-    } else if (manager.role === 'Admin') {
+    } else if (manager.roles.includes("Admin")) {
       if (teamId && teamId !== 'all') {
         userWhere.teamId = teamId;
       }

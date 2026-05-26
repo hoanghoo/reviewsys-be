@@ -1,7 +1,7 @@
 const authorizeRole = (...allowedRoles) => {
   return (req, res, next) => {
-    if (!req.userRole) {
-      return res.status(403).json({ message: 'User role not found' });
+    if (!req.userRoles || req.userRoles.length === 0) {
+      return res.status(403).json({ message: 'User roles not found' });
     }
 
     const effectiveRoles = [...allowedRoles];
@@ -9,7 +9,9 @@ const authorizeRole = (...allowedRoles) => {
       effectiveRoles.push('Leader');
     }
 
-    if (!effectiveRoles.includes(req.userRole)) {
+    const hasPermission = req.userRoles.some(role => effectiveRoles.includes(role));
+
+    if (!hasPermission) {
       return res.status(403).json({ message: 'Access forbidden: Insufficient permissions' });
     }
 

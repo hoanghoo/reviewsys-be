@@ -19,18 +19,16 @@ const verifyToken = (req, res, next) => {
       });
       if (!user) return res.status(401).json({ message: 'Unauthorized' });
       
-      let role = user.role;
-      if (user.teamId === 1) {
-        role = 'Admin';
-      } else if (user.teamId === 7 || (user.Team && user.Team.shortName === 'Ban Lãnh đạo')) {
-        role = 'Leader';
-      }
+      let roles = Array.isArray(user.roles) ? user.roles : (user.roles ? [user.roles] : ['Employee']);
+      
       
       req.userId = user.id;
-      req.userRole = role;
+      req.userRoles = roles;
+      req.userRole = roles[0] || 'Employee'; // Fallback
       req.user = { 
         id: user.id, 
-        role: role, 
+        roles: roles,
+        role: roles[0] || 'Employee', // Fallback 
         teamId: user.teamId, 
         departmentId: user.departmentId,
         fullName: user.fullName,
