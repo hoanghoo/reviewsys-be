@@ -23,9 +23,18 @@ const getReviewPeriodById = async (req, res) => {
 
 const createReviewPeriod = async (req, res) => {
   try {
-    const { name, startDate, endDate, status, templateId, teamIds } = req.body;
+    const { name, monthYear, startDate, endDate, status, templateId, teamIds } = req.body;
+
+    if (monthYear) {
+      const existing = await ReviewPeriod.findOne({ where: { monthYear } });
+      if (existing) {
+        return res.status(400).json({ message: 'Kỳ đánh giá cho tháng này đã tồn tại.' });
+      }
+    }
+
     const period = await ReviewPeriod.create({ 
       name, 
+      monthYear,
       startDate, 
       endDate, 
       status, 
@@ -43,9 +52,18 @@ const updateReviewPeriod = async (req, res) => {
     const period = await ReviewPeriod.findByPk(req.params.id);
     if (!period) return res.status(404).json({ message: 'Review Period not found' });
     
-    const { name, startDate, endDate, status, templateId, teamIds } = req.body;
+    const { name, monthYear, startDate, endDate, status, templateId, teamIds } = req.body;
+    
+    if (monthYear && monthYear !== period.monthYear) {
+      const existing = await ReviewPeriod.findOne({ where: { monthYear } });
+      if (existing) {
+        return res.status(400).json({ message: 'Kỳ đánh giá cho tháng này đã tồn tại.' });
+      }
+    }
+
     await period.update({ 
       name, 
+      monthYear,
       startDate, 
       endDate, 
       status, 

@@ -39,7 +39,26 @@ exports.updateTeam = async (req, res) => {
 exports.assignLeader = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId } = req.body;
+    const { userId, users } = req.body;
+    
+    if (users && Array.isArray(users)) {
+      const team = await Team.findByPk(id);
+      const isLeadership = team && (team.shortName === 'Ban Lãnh đạo' || team.id === 7);
+      const leaderPos = isLeadership ? 'Trưởng phòng' : 'Đội trưởng';
+      
+      const leaderCount = users.filter(u => u.position === leaderPos).length;
+      if (leaderCount > 1) {
+        return res.status(400).json({ message: `Mỗi đội chỉ được phép có tối đa 1 ${leaderPos}` });
+      }
+
+      for (const u of users) {
+        await User.update(
+          { position: u.position, role: u.role },
+          { where: { id: u.id, teamId: id } }
+        );
+      }
+      return res.json({ message: 'Phân công thành công' });
+    }
     
     // Demote current leaders
     await User.update(

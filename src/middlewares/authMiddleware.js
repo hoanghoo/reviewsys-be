@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, Team } = require('../models');
 
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -10,15 +10,38 @@ const verifyToken = (req, res, next) => {
 
   const secret = process.env.JWT_SECRET || 'iprs-dev-secret-change-me';
   
-  jwt.verify(token, secret, (err, decoded) => {
+  jwt.verify(token, secret, async (err, decoded) => {
     if (err) return res.status(401).json({ message: 'Unauthorized' });
     
-    // Set for compatibility
-    req.userId = decoded.id;
-    req.userRole = decoded.role;
-    req.user = { id: decoded.id, role: decoded.role };
-    
-    next();
+    try {
+      const user = await User.findByPk(decoded.id, {
+        include: [{ model: Team }]
+      });
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+      
+      let role = user.role;
+      if (user.teamId === 1) {
+        role = 'Admin';
+      } else if (user.teamId === 7 || (user.Team && user.Team.shortName === 'Ban Lãnh đạo')) {
+        role = 'Leader';
+      }
+      
+      req.userId = user.id;
+      req.userRole = role;
+      req.user = { 
+        id: user.id, 
+        role: role, 
+        teamId: user.teamId, 
+        departmentId: user.departmentId,
+        fullName: user.fullName,
+        position: user.position,
+        managedTeamIds: user.managedTeamIds
+      };
+      
+      next();
+    } catch (error) {
+      return res.status(500).json({ message: error.message });
+    }
   });
 };
 

@@ -39,6 +39,10 @@ const User = sequelize.define('User', {
   departmentId: {
     type: DataTypes.INTEGER,
     allowNull: true,
+  },
+  managedTeamIds: {
+    type: DataTypes.JSON,
+    allowNull: true,
   }
 }, {
   timestamps: true,

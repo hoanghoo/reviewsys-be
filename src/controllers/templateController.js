@@ -27,7 +27,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: fileFilter
@@ -35,7 +35,7 @@ const upload = multer({
 
 // We don't need a separate memory upload anymore since we use it directly above
 // But keep uploadMemory if it's used elsewhere
-const uploadMemory = multer({ 
+const uploadMemory = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: fileFilter
@@ -48,7 +48,7 @@ const uploadTemplate = async (req, res) => {
     }
 
     const { name } = req.body;
-    
+
     const template = await Template.create({
       name,
       type: 'Word', // always Word now
@@ -81,6 +81,39 @@ const convertDocxToHtml = async (source) => {
     }
   });
 
+  // NORMALIZATION: Ensure each row has exactly the expected number of cells (5 for main, 4 for sub-rows)
+  // This removes extra empty columns on the left that Mammoth sometimes adds  // Get true header cell count
+  const headerCellCount = $('thead tr').first().find('th, td').length || 5;
+
+  let activeTtRowspan = 0;
+  $('tbody tr').each((i, el) => {
+    let $row = $(el);
+    let cells = $row.find('td');
+    
+    let expectedCells = activeTtRowspan > 0 ? (headerCellCount - 1) : headerCellCount;
+    
+    let originalLength = cells.length;
+    // If Mammoth added extra empty cells on the left, remove them
+    while (cells.length > expectedCells) {
+      $(cells[0]).remove();
+      cells = $row.find('td');
+    }
+    
+    // In case Mammoth merged cells and we have FEWER than expected, pad on the right
+    while (cells.length < expectedCells) {
+      $row.append('<td></td>');
+      cells = $row.find('td');
+    }
+    
+    // Update rowspan tracker
+    if (expectedCells === headerCellCount) {
+      let rs = parseInt($(cells[0]).attr('rowspan')) || 1;
+      if (rs > 1) activeTtRowspan = rs - 1;
+    } else {
+      if (activeTtRowspan > 0) activeTtRowspan--;
+    }
+  });
+
   const rows = $('tbody tr').toArray();
   let currentRomanId = null;
   let currentArabicId = null;
@@ -88,7 +121,7 @@ const convertDocxToHtml = async (source) => {
   for (let i = 0; i < rows.length; i++) {
     const row = $(rows[i]);
     const cells = row.find('td');
-    
+
     // We need at least 3 cells to safely identify Điểm chuẩn, Điểm chấm, Ghi chú
     if (cells.length < 3) continue;
 
@@ -136,34 +169,43 @@ const convertDocxToHtml = async (source) => {
       }
 
       if (shouldMerge) {
-        const scoreCell = $(cells[cells.length - 2]);
-        const noteCell = $(cells[cells.length - 1]);
+        const scoreCell = $(cells[cells.length - (headerCellCount === 6 ? 3 : 2)]);
+        const noteCell = $(cells[cells.length - (headerCellCount === 6 ? 2 : 1)]);
 
         scoreCell.attr('rowspan', rowspan);
         noteCell.attr('rowspan', rowspan);
+        if (headerCellCount === 6) { $(cells[cells.length - 1]).attr('rowspan', rowspan); }
 
         scoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${myId}" data-parent-id="${myParentId}" data-row-index="${i}" />`);
-        noteCell.html(`<input type="text" class="note-input" data-row-index="${i}" />`);
+        noteCell.html(`<input type="number" min="-99" max="99" class="score-input commander-score" data-id="${myId}_commander" data-parent-id="${myParentId ? myParentId + '_commander' : ''}" data-row-index="${i}" />`);
+        if (headerCellCount === 6) {
+          const realNoteCell = $(cells[cells.length - 1]);
+          realNoteCell.html(`<input type="text" class="note-input" data-id="${myId}_note" data-parent-id="${myParentId ? myParentId + '_note' : ''}" data-row-index="${i}" />`);
+        }
 
         for (let j = 1; j < rowspan; j++) {
           const nextRow = $(rows[i + j]);
           if (nextRow.length) {
             const nextCells = nextRow.find('td');
             if (nextCells.length > 2) {
-              nextRow.find('td').slice(-(nextCells.length - 2)).remove();
+              nextRow.find('td').slice(2).remove(); // Keep only Nội dung and Điểm chuẩn
             }
           }
         }
-        
+
         i += rowspan - 1;
         continue;
       } else {
         // DO NOT MERGE: This is a Parent group with individual Children rows (e.g., III.1 or III.2)
-        const parentScoreCell = $(cells[cells.length - 2]);
-        const parentNoteCell = $(cells[cells.length - 1]);
-        
+        const parentScoreCell = $(cells[cells.length - (headerCellCount === 6 ? 3 : 2)]);
+        const parentNoteCell = $(cells[cells.length - (headerCellCount === 6 ? 2 : 1)]);
+
         parentScoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${myId}" data-parent-id="${myParentId}" readonly placeholder="..." data-row-index="${i}" />`);
-        parentNoteCell.html(`<input type="text" class="note-input" data-row-index="${i}" />`);
+        parentNoteCell.html(`<input type="number" min="-99" max="99" class="score-input commander-score" data-id="${myId}_commander" data-parent-id="${myParentId ? myParentId + '_commander' : ''}" readonly placeholder="..." data-row-index="${i}" />`);
+        if (headerCellCount === 6) {
+          const realNoteCell = $(cells[cells.length - 1]);
+          realNoteCell.html(`<input type="text" class="note-input" data-id="${myId}_note" data-parent-id="${myParentId ? myParentId + '_note' : ''}" data-row-index="${i}" />`);
+        }
 
         let currentSubParentId = null;
 
@@ -174,10 +216,10 @@ const convertDocxToHtml = async (source) => {
             if (nextCells.length >= 2) {
               // Usually in an unmerged sub-row, the 'Nội dung' is the first cell since the TT column is merged
               const noiDungText = $(nextCells[0]).text().trim();
-              
+
               // Check if it's a sub-category like "2.1.", "1.1", etc.
               const isSubCategory = /^[0-9]+\.[0-9]+/.test(noiDungText);
-              
+
               const childId = `${myId}_child_${j}`;
               let childParentId = myId;
 
@@ -193,30 +235,43 @@ const convertDocxToHtml = async (source) => {
                 }
               }
 
-              const childScoreCell = $(nextCells[nextCells.length - 2]);
-              const childNoteCell = $(nextCells[nextCells.length - 1]);
-              childScoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${childId}" data-parent-id="${childParentId}" data-row-index="${i + j}" />`);
-              childNoteCell.html(`<input type="text" class="note-input" data-row-index="${i + j}" />`);
+              const childScoreCell = $(nextCells[nextCells.length - (headerCellCount === 6 ? 3 : 2)]);
+              const childNoteCell = $(nextCells[nextCells.length - (headerCellCount === 6 ? 2 : 1)]);
+              childScoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${childId}" data-parent-id="${childParentId}" data-row-index="${i + j}" readonly />`);
+              childNoteCell.html(`<input type="number" min="-99" max="99" class="score-input commander-score" data-id="${childId}_commander" data-parent-id="${childParentId}_commander" data-row-index="${i + j}" readonly />`);
+              if (headerCellCount === 6) {
+                const childRealNoteCell = $(nextCells[nextCells.length - 1]);
+                childRealNoteCell.html(`<input type="text" class="note-input" data-id="${childId}_note" data-parent-id="${childParentId}_note" data-row-index="${i + j}" />`);
+              }
             }
           }
         }
-        
+
         i += rowspan - 1;
         continue;
       }
     }
 
     // Normal, single unmerged row (e.g., II.2, II.3)
-    const scoreCell = $(cells[cells.length - 2]);
-    const noteCell = $(cells[cells.length - 1]);
-    
+    const scoreCell = $(cells[cells.length - (headerCellCount === 6 ? 3 : 2)]);
+    const noteCell = $(cells[cells.length - (headerCellCount === 6 ? 2 : 1)]);
+
     scoreCell.html(`<input type="number" min="-99" max="99" class="score-input" data-id="${myId}" data-parent-id="${myParentId}" data-row-index="${i}" />`);
-    noteCell.html(`<input type="text" class="note-input" data-row-index="${i}" />`);
+    noteCell.html(`<input type="number" min="-99" max="99" class="score-input commander-score" data-id="${myId}_commander" data-parent-id="${myParentId ? myParentId + '_commander' : ''}" data-row-index="${i}" />`);
+    if (headerCellCount === 6) {
+      const realNoteCell = $(cells[cells.length - 1]);
+      realNoteCell.html(`<input type="text" class="note-input" data-id="${myId}_note" data-parent-id="${myParentId ? myParentId + '_note' : ''}" data-row-index="${i}" />`);
+    }
   }
 
   // After generating all inputs, we can make any input that has children readonly
   // We do this by injecting a small script or processing it in frontend. 
   // We'll let the frontend handle the readonly and calculation based on data-id and data-parent-id.
+  // Normalize column count across all rows to match the header (redundant now due to NORMALIZATION above, but keeping safe fallback)
+  // REMOVED: Safe fallback was actually breaking rowspans because sub-rows have fewer cells than headerCellCount.
+  // Set all inputs to disabled in preview mode to prevent editing
+  $('input').attr('disabled', true);
+  $('input').removeAttr('readonly');
   return $.html();
 };
 
@@ -286,7 +341,7 @@ const deleteTemplate = async (req, res) => {
     if (template.filePath && fs.existsSync(template.filePath)) {
       fs.unlinkSync(template.filePath); // Legacy cleanup
     }
-    
+
     await template.destroy();
     res.status(204).send();
   } catch (error) {
@@ -294,7 +349,7 @@ const deleteTemplate = async (req, res) => {
   }
 };
 
-module.exports = {
+module.exports = { convertDocxToHtml,
   upload,
   uploadMemory,
   uploadTemplate,

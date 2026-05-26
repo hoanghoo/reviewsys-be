@@ -65,8 +65,7 @@ const getTeamReviews = async (req, res) => {
 
     const { Op } = require('sequelize');
     let userWhere = { 
-      role: { [Op.in]: ['Employee', 'Manager'] },
-      id: { [Op.ne]: manager.id } // Don't review self here
+      role: { [Op.in]: ['Employee', 'Manager', 'Admin'] } // Include all roles for testing/tracking
     };
 
     // If period is scoped to multiple teams
@@ -81,12 +80,27 @@ const getTeamReviews = async (req, res) => {
 
     // Filter by Team/Dept
     if (manager.role === 'Manager') {
-      // Strictly only their team
-      if (manager.teamId) {
-        userWhere.teamId = manager.teamId;
+      if (manager.position === 'Trưởng phòng') {
+        if (teamId && teamId !== 'all') {
+          userWhere.teamId = teamId;
+        }
+      } else if (manager.position === 'Phó trưởng phòng' || manager.position === 'Phó phòng') {
+        const managed = Array.isArray(manager.managedTeamIds) ? manager.managedTeamIds : [];
+        if (teamId && teamId !== 'all') {
+          if (managed.includes(Number(teamId))) {
+            userWhere.teamId = teamId;
+          } else {
+            return res.status(403).json({ message: 'Không có quyền quản lý đội này' });
+          }
+        } else {
+          userWhere.teamId = { [Op.in]: managed };
+        }
       } else {
-        // If manager has no teamId, they can see their department (fallback)
-        userWhere.departmentId = manager.departmentId;
+        if (manager.teamId) {
+          userWhere.teamId = manager.teamId;
+        } else {
+          userWhere.departmentId = manager.departmentId;
+        }
       }
     } else {
       if (teamId && teamId !== 'all') {
@@ -141,15 +155,19 @@ const getTeamReviews = async (req, res) => {
       total: allUsers.length,
       notStarted: 0,
       submitted: 0,
+      managerReviewed: 0,
       completed: 0
     };
 
     allUsers.forEach(u => {
       const review = u.ReviewsReceived?.[0];
+      console.log(`User ${u.id} review status:`, review ? review.status : 'No review');
       if (!review || review.status === 'Draft') stats.notStarted++;
       else if (review.status === 'Submitted') stats.submitted++;
-      else if (review.status === 'ManagerReviewed' || review.status === 'Reviewed' || review.status === 'Completed') stats.completed++;
+      else if (review.status === 'ManagerReviewed') stats.managerReviewed++;
+      else if (review.status === 'Reviewed' || review.status === 'Completed') stats.completed++;
     });
+    console.log('Stats calculated:', stats);
 
     res.status(200).json({
       data: users,
@@ -209,10 +227,27 @@ const exportTeamExcel = async (req, res) => {
 
     let userWhere = {};
     if (manager.role === 'Manager') {
-      if (manager.teamId) {
-        userWhere.teamId = manager.teamId;
+      if (manager.position === 'Trưởng phòng') {
+        if (teamId && teamId !== 'all') {
+          userWhere.teamId = teamId;
+        }
+      } else if (manager.position === 'Phó trưởng phòng' || manager.position === 'Phó phòng') {
+        const managed = Array.isArray(manager.managedTeamIds) ? manager.managedTeamIds : [];
+        if (teamId && teamId !== 'all') {
+          if (managed.includes(Number(teamId))) {
+            userWhere.teamId = teamId;
+          } else {
+            return res.status(403).json({ message: 'Không có quyền xuất dữ liệu đội này' });
+          }
+        } else {
+          userWhere.teamId = { [Op.in]: managed };
+        }
       } else {
-        userWhere.departmentId = manager.departmentId;
+        if (manager.teamId) {
+          userWhere.teamId = manager.teamId;
+        } else {
+          userWhere.departmentId = manager.departmentId;
+        }
       }
     } else if (manager.role === 'Admin') {
       if (teamId && teamId !== 'all') {
@@ -256,8 +291,27 @@ const exportTeamExcel = async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(templatePath);
 
-    const teamName = manager.Team ? manager.Team.fullName.toUpperCase() : manager.username.toUpperCase();
-    const leaderName = manager.fullName;
+    // Calculate team name and leader name (always the Đội trưởng's name of that team)
+    let targetTeamId = teamId;
+    if (!targetTeamId || targetTeamId === 'all') {
+      targetTeamId = manager.teamId;
+    }
+
+    let teamObj = null;
+    if (targetTeamId) {
+      teamObj = await Team.findByPk(targetTeamId);
+    }
+    const teamName = teamObj ? teamObj.fullName.toUpperCase() : (manager.Team ? manager.Team.fullName.toUpperCase() : manager.username.toUpperCase());
+
+    let leaderName = manager.fullName;
+    if (targetTeamId) {
+      const teamLeader = await User.findOne({
+        where: { teamId: targetTeamId, position: 'Đội trưởng' }
+      });
+      if (teamLeader) {
+        leaderName = teamLeader.fullName;
+      }
+    }
 
     for (let month = 1; month <= 12; month++) {
       const sheetName = `KPI_Thang${month}`;

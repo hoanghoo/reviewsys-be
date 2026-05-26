@@ -11,6 +11,9 @@ router.post('/change-password', userController.changePassword);
 
 // Admin only routes
 router.use(authorizeRole('Admin'));
+router.get('/import-template', userController.importTemplate);
+router.post('/import-preview', userController.uploadMemory.single('file'), userController.importPreview);
+router.post('/import-submit', userController.importSubmit);
 router.get('/', userController.getAllUsers);
 router.post('/', userController.createUser);
 router.put('/:id', userController.updateUser);

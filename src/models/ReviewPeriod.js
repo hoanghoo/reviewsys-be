@@ -11,6 +11,11 @@ const ReviewPeriod = sequelize.define('ReviewPeriod', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  monthYear: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true
+  },
   startDate: {
     type: DataTypes.DATE,
     allowNull: false,

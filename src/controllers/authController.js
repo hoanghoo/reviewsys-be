@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, Team } = require('../models');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -15,7 +15,10 @@ const login = async (req, res) => {
       return res.status(400).json({ message: 'Username and password are required' });
     }
 
-    const user = await User.findOne({ where: { username } });
+    const user = await User.findOne({ 
+      where: { username },
+      include: [{ model: Team }]
+    });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -25,8 +28,15 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid Password' });
     }
 
+    let role = user.role;
+    if (user.teamId === 1) {
+      role = 'Admin';
+    } else if (user.teamId === 7 || (user.Team && user.Team.shortName === 'Ban Lãnh đạo')) {
+      role = 'Leader';
+    }
+
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, role: role },
       JWT_SECRET || 'iprs-dev-secret-change-me',
       { expiresIn: 86400 } // 24 hours
     );
@@ -35,7 +45,7 @@ const login = async (req, res) => {
       id: user.id,
       username: user.username,
       fullName: user.fullName,
-      role: user.role,
+      role: role,
       accessToken: token
     });
   } catch (error) {
