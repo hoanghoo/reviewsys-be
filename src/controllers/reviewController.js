@@ -675,6 +675,10 @@ const exportDraftDocx = async (req, res) => {
     }
 
     const trs = scoringTable.getElementsByTagName('w:tr');
+    let headerCellCount = 5;
+    if (trs.length > 0) {
+      headerCellCount = trs[0].getElementsByTagName('w:tc').length;
+    }
 
     // Step 1: Build groups by analyzing vMerge on TT column (col 0) in the XML
     // Groups: rows sharing the same vMerge restart→continue block, or standalone rows
@@ -685,7 +689,15 @@ const exportDraftDocx = async (req, res) => {
       if (cells.length === 0) continue;
       
       const ttText = getCellText(cells[0]).trim().toUpperCase();
-      if (ttText.includes('TỔNG ĐIỂM')) continue; // Skip total row
+      if (ttText.includes('TỔNG ĐIỂM')) {
+        if (headerCellCount === 6 && cells.length >= 2) {
+          injectTextToCell(doc, cells[1], totalScore.toString());
+          if (cells.length > 2) injectTextToCell(doc, cells[2], totalScore.toString());
+        } else if (headerCellCount === 5 && cells.length >= 2) {
+          injectTextToCell(doc, cells[1], totalScore.toString());
+        }
+        continue;
+      }
       
       // Check vMerge on TT cell (col 0)
       let vMerge = 'none';
@@ -727,7 +739,7 @@ const exportDraftDocx = async (req, res) => {
     let scoreIdx = 0;
     
     for (const group of groups) {
-      if (scoreIdx >= scores.length) break;
+      if (scoreIdx * 2 >= scores.length) break;
       
       const { startRow, rowCount } = group;
       const xmlRow = trs[startRow];
@@ -753,38 +765,59 @@ const exportDraftDocx = async (req, res) => {
         
         if (shouldMerge) {
           // MERGED: One score for the entire group
-          const scoreVal = scores[scoreIdx] || '';
+          const empScoreVal = scores[scoreIdx * 2] || '';
+          const cmdScoreVal = scores[scoreIdx * 2 + 1] || '';
           const noteVal = (notes && notes[scoreIdx]) || '';
           
-          console.log(`[EXPORT] MERGE rows ${startRow}-${startRow + rowCount - 1}: score="${scoreVal}"`);
-          
-          injectTextToCell(doc, xmlCells[3], scoreVal);
-          applyVMerge(doc, xmlCells[3], 'restart');
-          if (xmlCells.length > 4) {
-            injectTextToCell(doc, xmlCells[4], noteVal);
-            applyVMerge(doc, xmlCells[4], 'restart');
+          if (headerCellCount === 6) {
+            injectTextToCell(doc, xmlCells[3], empScoreVal);
+            applyVMerge(doc, xmlCells[3], 'restart');
+            if (xmlCells.length > 4) {
+              injectTextToCell(doc, xmlCells[4], cmdScoreVal);
+              applyVMerge(doc, xmlCells[4], 'restart');
+            }
+            if (xmlCells.length > 5) {
+              injectTextToCell(doc, xmlCells[5], noteVal);
+              applyVMerge(doc, xmlCells[5], 'restart');
+            }
+          } else {
+            const finalScore = cmdScoreVal !== '' ? cmdScoreVal : empScoreVal;
+            injectTextToCell(doc, xmlCells[3], finalScore);
+            applyVMerge(doc, xmlCells[3], 'restart');
+            if (xmlCells.length > 4) {
+              injectTextToCell(doc, xmlCells[4], noteVal);
+              applyVMerge(doc, xmlCells[4], 'restart');
+            }
           }
           
           for (let j = 1; j < rowCount; j++) {
             const subCells = trs[startRow + j].getElementsByTagName('w:tc');
             if (subCells.length > 3) { clearCell(doc, subCells[3]); applyVMerge(doc, subCells[3], 'continue'); }
             if (subCells.length > 4) { clearCell(doc, subCells[4]); applyVMerge(doc, subCells[4], 'continue'); }
+            if (headerCellCount === 6 && subCells.length > 5) { clearCell(doc, subCells[5]); applyVMerge(doc, subCells[5], 'continue'); }
           }
           scoreIdx++;
         } else {
           // NOT MERGED: Parent row + children with sub-category grouping
-          const parentScoreVal = scores[scoreIdx] || '';
-          const parentNoteVal = (notes && notes[scoreIdx]) || '';
+          const pEmpScoreVal = scores[scoreIdx * 2] || '';
+          const pCmdScoreVal = scores[scoreIdx * 2 + 1] || '';
+          const pNoteVal = (notes && notes[scoreIdx]) || '';
           
-          console.log(`[EXPORT] PARENT row ${startRow}: score="${parentScoreVal}" (${rowCount - 1} children)`);
-          injectTextToCell(doc, xmlCells[3], parentScoreVal);
-          if (xmlCells.length > 4) injectTextToCell(doc, xmlCells[4], parentNoteVal);
+          if (headerCellCount === 6) {
+            injectTextToCell(doc, xmlCells[3], pEmpScoreVal);
+            if (xmlCells.length > 4) injectTextToCell(doc, xmlCells[4], pCmdScoreVal);
+            if (xmlCells.length > 5) injectTextToCell(doc, xmlCells[5], pNoteVal);
+          } else {
+            const pFinalScore = pCmdScoreVal !== '' ? pCmdScoreVal : pEmpScoreVal;
+            injectTextToCell(doc, xmlCells[3], pFinalScore);
+            if (xmlCells.length > 4) injectTextToCell(doc, xmlCells[4], pNoteVal);
+          }
           scoreIdx++;
           
           // Process children with sub-category awareness
           let j = 1;
           while (j < rowCount) {
-            if (scoreIdx >= scores.length) break;
+            if (scoreIdx * 2 >= scores.length) break;
             const childRow = startRow + j;
             const childCells = trs[childRow].getElementsByTagName('w:tc');
             if (childCells.length < 4) { j++; continue; }
@@ -799,7 +832,6 @@ const exportDraftDocx = async (req, res) => {
                 const kCells = trs[startRow + k].getElementsByTagName('w:tc');
                 if (kCells.length < 2) break;
                 const kText = getCellText(kCells[1]).trim();
-                // Stop if we hit another sub-category or non-bullet
                 if (/^[0-9]+\.[0-9]+/.test(kText)) break;
                 if (kText.startsWith('-') || kText.startsWith('+') || kText.startsWith('•')) {
                   subMergeCount++;
@@ -808,62 +840,92 @@ const exportDraftDocx = async (req, res) => {
                 }
               }
               
-              const subScore = scores[scoreIdx] || '';
+              const subEmpScore = scores[scoreIdx * 2] || '';
+              const subCmdScore = scores[scoreIdx * 2 + 1] || '';
               const subNote = (notes && notes[scoreIdx]) || '';
               
+              const targetScoreCell = childCells[childCells.length - (headerCellCount === 6 ? 3 : 2)];
+              const targetNoteCell = headerCellCount === 6 ? childCells[childCells.length - 2] : childCells[childCells.length - 1];
+              const targetRealNoteCell = headerCellCount === 6 ? childCells[childCells.length - 1] : null;
+
               if (subMergeCount > 1) {
-                // Merge sub-category with its bullet children
-                console.log(`[EXPORT]   SUB-CAT row ${childRow} MERGE ${subMergeCount} rows: score="${subScore}"`);
-                injectTextToCell(doc, childCells[childCells.length - 2], subScore);
-                applyVMerge(doc, childCells[childCells.length - 2], 'restart');
-                if (childCells.length > 4) {
-                  injectTextToCell(doc, childCells[childCells.length - 1], subNote);
-                  applyVMerge(doc, childCells[childCells.length - 1], 'restart');
+                if (headerCellCount === 6) {
+                  injectTextToCell(doc, targetScoreCell, subEmpScore);
+                  applyVMerge(doc, targetScoreCell, 'restart');
+                  if (targetNoteCell) { injectTextToCell(doc, targetNoteCell, subCmdScore); applyVMerge(doc, targetNoteCell, 'restart'); }
+                  if (targetRealNoteCell) { injectTextToCell(doc, targetRealNoteCell, subNote); applyVMerge(doc, targetRealNoteCell, 'restart'); }
+                } else {
+                  const subFinalScore = subCmdScore !== '' ? subCmdScore : subEmpScore;
+                  injectTextToCell(doc, targetScoreCell, subFinalScore);
+                  applyVMerge(doc, targetScoreCell, 'restart');
+                  if (targetNoteCell) { injectTextToCell(doc, targetNoteCell, subNote); applyVMerge(doc, targetNoteCell, 'restart'); }
                 }
                 scoreIdx++;
                 
-                // Skip the individual bullet scores (they're merged into sub-cat)
                 for (let k = 1; k < subMergeCount; k++) {
                   scoreIdx++; // consume the bullet score from scores array
                   const bulletCells = trs[startRow + j + k].getElementsByTagName('w:tc');
-                  if (bulletCells.length > 3) {
-                    clearCell(doc, bulletCells[bulletCells.length - 2]);
-                    applyVMerge(doc, bulletCells[bulletCells.length - 2], 'continue');
-                  }
-                  if (bulletCells.length > 4) {
-                    clearCell(doc, bulletCells[bulletCells.length - 1]);
-                    applyVMerge(doc, bulletCells[bulletCells.length - 1], 'continue');
-                  }
+                  const bScoreCell = bulletCells[bulletCells.length - (headerCellCount === 6 ? 3 : 2)];
+                  const bNoteCell = headerCellCount === 6 ? bulletCells[bulletCells.length - 2] : bulletCells[bulletCells.length - 1];
+                  const bRealNoteCell = headerCellCount === 6 ? bulletCells[bulletCells.length - 1] : null;
+
+                  if (bScoreCell) { clearCell(doc, bScoreCell); applyVMerge(doc, bScoreCell, 'continue'); }
+                  if (bNoteCell) { clearCell(doc, bNoteCell); applyVMerge(doc, bNoteCell, 'continue'); }
+                  if (bRealNoteCell) { clearCell(doc, bRealNoteCell); applyVMerge(doc, bRealNoteCell, 'continue'); }
                 }
                 
                 j += subMergeCount;
               } else {
-                // Sub-category with no bullet children — single cell
-                console.log(`[EXPORT]   SUB-CAT row ${childRow} SINGLE: score="${subScore}"`);
-                injectTextToCell(doc, childCells[childCells.length - 2], subScore);
-                if (childCells.length > 4) injectTextToCell(doc, childCells[childCells.length - 1], subNote);
+                if (headerCellCount === 6) {
+                  injectTextToCell(doc, targetScoreCell, subEmpScore);
+                  if (targetNoteCell) injectTextToCell(doc, targetNoteCell, subCmdScore);
+                  if (targetRealNoteCell) injectTextToCell(doc, targetRealNoteCell, subNote);
+                } else {
+                  const subFinalScore = subCmdScore !== '' ? subCmdScore : subEmpScore;
+                  injectTextToCell(doc, targetScoreCell, subFinalScore);
+                  if (targetNoteCell) injectTextToCell(doc, targetNoteCell, subNote);
+                }
                 scoreIdx++;
                 j++;
               }
             } else {
-              // Regular child row (not a sub-category)
-              const childScore = scores[scoreIdx] || '';
-              const childNote = (notes && notes[scoreIdx]) || '';
-              console.log(`[EXPORT]   CHILD row ${childRow}: score="${childScore}"`);
-              injectTextToCell(doc, childCells[childCells.length - 2], childScore);
-              if (childCells.length > 4) injectTextToCell(doc, childCells[childCells.length - 1], childNote);
+              const cEmpScore = scores[scoreIdx * 2] || '';
+              const cCmdScore = scores[scoreIdx * 2 + 1] || '';
+              const cNote = (notes && notes[scoreIdx]) || '';
+              
+              const targetScoreCell = childCells[childCells.length - (headerCellCount === 6 ? 3 : 2)];
+              const targetNoteCell = headerCellCount === 6 ? childCells[childCells.length - 2] : childCells[childCells.length - 1];
+              const targetRealNoteCell = headerCellCount === 6 ? childCells[childCells.length - 1] : null;
+
+              if (headerCellCount === 6) {
+                injectTextToCell(doc, targetScoreCell, cEmpScore);
+                if (targetNoteCell) injectTextToCell(doc, targetNoteCell, cCmdScore);
+                if (targetRealNoteCell) injectTextToCell(doc, targetRealNoteCell, cNote);
+              } else {
+                const cFinalScore = cCmdScore !== '' ? cCmdScore : cEmpScore;
+                injectTextToCell(doc, targetScoreCell, cFinalScore);
+                if (targetNoteCell) injectTextToCell(doc, targetNoteCell, cNote);
+              }
               scoreIdx++;
               j++;
             }
           }
         }
       } else {
-        // Single row — just fill the score
-        const scoreVal = scores[scoreIdx] || '';
-        const noteVal = (notes && notes[scoreIdx]) || '';
-        console.log(`[EXPORT] SINGLE row ${startRow}: score="${scoreVal}"`);
-        injectTextToCell(doc, xmlCells[3], scoreVal);
-        if (xmlCells.length > 4) injectTextToCell(doc, xmlCells[4], noteVal);
+        // Single row
+        const sEmpScore = scores[scoreIdx * 2] || '';
+        const sCmdScore = scores[scoreIdx * 2 + 1] || '';
+        const sNote = (notes && notes[scoreIdx]) || '';
+        
+        if (headerCellCount === 6) {
+          injectTextToCell(doc, xmlCells[3], sEmpScore);
+          if (xmlCells.length > 4) injectTextToCell(doc, xmlCells[4], sCmdScore);
+          if (xmlCells.length > 5) injectTextToCell(doc, xmlCells[5], sNote);
+        } else {
+          const sFinalScore = sCmdScore !== '' ? sCmdScore : sEmpScore;
+          injectTextToCell(doc, xmlCells[3], sFinalScore);
+          if (xmlCells.length > 4) injectTextToCell(doc, xmlCells[4], sNote);
+        }
         scoreIdx++;
       }
     }
@@ -967,12 +1029,6 @@ const exportDraftDocx = async (req, res) => {
         matchType = 'class';
         header = 'Xếp loại: ';
         value = ' ' + (metadata?.classification || '');
-      }
-      // 6. Total Score
-      else if (pText.toUpperCase().includes('TỔNG ĐIỂM')) {
-        matchType = 'score';
-        header = pText.match(/TỔNG ĐIỂM\s*[:：]?/i)?.[0] || 'TỔNG ĐIỂM: ';
-        value = ' ' + totalScore;
       }
 
       // 7. Commander Header
@@ -1082,7 +1138,24 @@ function injectTextToCell(doc, tc, text) {
   
   // Clear the cell
   while (tc.firstChild) tc.removeChild(tc.firstChild);
-  if (tcPr) tc.appendChild(tcPr);
+  
+  if (tcPr) {
+    let vAlign = null;
+    for (let k = 0; k < tcPr.childNodes.length; k++) {
+      if (tcPr.childNodes[k].nodeName === 'w:vAlign') {
+        vAlign = tcPr.childNodes[k];
+        break;
+      }
+    }
+    if (!vAlign) {
+      vAlign = doc.createElement('w:vAlign');
+      vAlign.setAttribute('w:val', 'center');
+      tcPr.appendChild(vAlign);
+    } else {
+      vAlign.setAttribute('w:val', 'center');
+    }
+    tc.appendChild(tcPr);
+  }
   
   const p = doc.createElement('w:p');
   const pPr = doc.createElement('w:pPr');

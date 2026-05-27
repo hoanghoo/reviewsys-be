@@ -21,8 +21,8 @@ const sequelize = (() => {
 
       return new Sequelize(dbUrl.pathname.substring(1), dbUrl.username, dbUrl.password, {
         host: dbUrl.hostname,
-        port: dbUrl.port || 5432,
-        dialect: 'postgres',
+        port: dbUrl.port || 3306,
+        dialect: 'mysql',
         logging: false,
         dialectOptions: {
           ssl: {
@@ -35,7 +35,7 @@ const sequelize = (() => {
       console.error('Failed to parse DATABASE_URL with URL class, falling back to direct string:', err.message);
       // Fallback for simple strings or if URL parsing fails
       return new Sequelize(process.env.DATABASE_URL, {
-        dialect: 'postgres',
+        dialect: 'mysql',
         logging: false,
         dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }
       });
@@ -44,12 +44,13 @@ const sequelize = (() => {
 
   // Fallback for local development using individual DB_ variables
   return new Sequelize(
-    process.env.DB_NAME || 'postgres',
-    process.env.DB_USER || 'postgres',
-    process.env.DB_PASS || '123456',
+    process.env.DB_NAME || 'database',
+    process.env.DB_USER || 'root',
+    process.env.DB_PASS || '',
     {
       host: process.env.DB_HOST || '127.0.0.1',
-      dialect: 'postgres', // Based on your .env.development it's postgres
+      port: process.env.DB_PORT || 3306,
+      dialect: 'mysql', // Based on your .env.development it's mysql
       logging: false,
     }
   );

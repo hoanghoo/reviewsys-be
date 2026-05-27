@@ -31,6 +31,7 @@ const login = async (req, res) => {
     let roles = Array.isArray(user.roles) ? user.roles : (user.roles ? [user.roles] : ['Employee']);
     
     // Dynamic Role Enforcement
+    if (!roles.includes('Employee')) roles.push('Employee');
     if (user.Team) {
       if (user.Team.shortName === 'Đội 1' || user.teamId === 1 || user.teamId === '1') {
         if (!roles.includes('Admin')) roles.push('Admin');

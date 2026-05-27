@@ -6,8 +6,8 @@ const bcrypt = require('bcryptjs');
 const calculateRoles = (inputRoles, position, teamId, isLeadershipTeam, isTeam1) => {
   const rolesSet = new Set(Array.isArray(inputRoles) ? inputRoles : [inputRoles || "Employee"]);
   
-  // Everyone should probably be at least Employee unless strictly only Admin
-  if (rolesSet.size === 0) rolesSet.add("Employee");
+  // Everyone should be at least Employee
+  rolesSet.add("Employee");
 
   // 1. Nếu thuộc ban lãnh đạo => role: lãnh đạo
   if (isLeadershipTeam) {
@@ -82,19 +82,16 @@ const createUser = async (req, res) => {
       }
     }
 
-    // Enforce 1 Commander, 1 Deputy Rule for regular teams
-    if (teamId && !isLeadershipTeam && (position === 'Đội trưởng' || position === 'Đội phó')) {
-      const posCheck = (position === 'Đội phó')
-        ? ['Đội phó']
-        : [position];
+    // Enforce 1 Commander Rule for regular teams (can have multiple Deputy Commanders)
+    if (teamId && !isLeadershipTeam && position === 'Đội trưởng') {
       const existing = await User.findOne({
         where: {
           teamId,
-          position: { [Op.in]: posCheck }
+          position: 'Đội trưởng'
         }
       });
       if (existing) {
-        return res.status(400).json({ message: `Đội này đã có ${position} (${existing.fullName})` });
+        return res.status(400).json({ message: `Đội này đã có Đội trưởng (${existing.fullName})` });
       }
     }
 
@@ -153,20 +150,17 @@ const updateUser = async (req, res) => {
       }
     }
 
-    // Enforce 1 Commander, 1 Deputy Rule for regular teams
-    if (teamId && !isLeadershipTeam && (position === 'Đội trưởng' || position === 'Đội phó')) {
-      const posCheck = (position === 'Đội phó')
-        ? ['Đội phó']
-        : [position];
+    // Enforce 1 Commander Rule for regular teams (can have multiple Deputy Commanders)
+    if (teamId && !isLeadershipTeam && position === 'Đội trưởng') {
       const existing = await User.findOne({ 
         where: { 
           teamId, 
-          position: { [Op.in]: posCheck },
+          position: 'Đội trưởng',
           id: { [Op.ne]: user.id } // Exclude current user
         } 
       });
       if (existing) {
-        return res.status(400).json({ message: `Đội này đã có ${position} (${existing.fullName})` });
+        return res.status(400).json({ message: `Đội này đã có Đội trưởng (${existing.fullName})` });
       }
     }
 

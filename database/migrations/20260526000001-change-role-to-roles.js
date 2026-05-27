@@ -8,21 +8,33 @@ module.exports = {
       allowNull: true,
     });
 
-    // 2. Migrate data from 'role' (ENUM/String) to 'roles' (JSON array)
-    // Postgres specific: Update using raw query to cast string to json array
+    const dialect = queryInterface.sequelize.getDialect();
+    const tableName = dialect === 'postgres' ? '"Users"' : '`Users`';
+    const roleCol = dialect === 'postgres' ? '"role"' : '`role`';
+    const rolesCol = dialect === 'postgres' ? '"roles"' : '`roles`';
+
     try {
-      await queryInterface.sequelize.query(`
-        UPDATE "Users" 
-        SET "roles" = json_build_array("role");
-      `);
+      if (dialect === 'postgres') {
+        await queryInterface.sequelize.query(`
+          UPDATE ${tableName} 
+          SET ${rolesCol} = json_build_array(${roleCol});
+        `);
+      } else if (dialect === 'mysql' || dialect === 'mariadb') {
+        await queryInterface.sequelize.query(`
+          UPDATE ${tableName} 
+          SET ${rolesCol} = JSON_ARRAY(${roleCol});
+        `);
+      } else {
+        throw new Error('Unsupported dialect for direct json array cast');
+      }
     } catch (err) {
-      console.warn("Failed to use json_build_array, trying fallback for SQLite/other DBs...");
-      const [users] = await queryInterface.sequelize.query('SELECT id, role FROM "Users";');
+      console.warn("Failed to use JSON functions, trying fallback for SQLite/other DBs...");
+      const [users] = await queryInterface.sequelize.query(`SELECT id, role FROM ${tableName};`);
       for (const user of users) {
         if (user.role) {
           await queryInterface.sequelize.query(`
-            UPDATE "Users" 
-            SET "roles" = '${JSON.stringify([user.role])}' 
+            UPDATE ${tableName} 
+            SET ${rolesCol} = '${JSON.stringify([user.role])}' 
             WHERE id = ${user.id};
           `);
         }

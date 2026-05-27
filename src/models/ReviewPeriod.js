@@ -35,6 +35,13 @@ const ReviewPeriod = sequelize.define('ReviewPeriod', {
   teamIds: {
     type: DataTypes.JSON,
     allowNull: true,
+    get() {
+      const rawValue = this.getDataValue('teamIds');
+      if (typeof rawValue === 'string') {
+        try { return JSON.parse(rawValue); } catch (e) { return rawValue; }
+      }
+      return rawValue;
+    }
   }
 }, {
   timestamps: true,

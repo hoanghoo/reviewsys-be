@@ -23,6 +23,13 @@ const User = sequelize.define('User', {
   roles: {
     type: DataTypes.JSON,
     defaultValue: ['Employee'],
+    get() {
+      const rawValue = this.getDataValue('roles');
+      if (typeof rawValue === 'string') {
+        try { return JSON.parse(rawValue); } catch (e) { return rawValue; }
+      }
+      return rawValue;
+    }
   },
   rank: {
     type: DataTypes.STRING,
@@ -43,6 +50,13 @@ const User = sequelize.define('User', {
   managedTeamIds: {
     type: DataTypes.JSON,
     allowNull: true,
+    get() {
+      const rawValue = this.getDataValue('managedTeamIds');
+      if (typeof rawValue === 'string') {
+        try { return JSON.parse(rawValue); } catch (e) { return rawValue; }
+      }
+      return rawValue;
+    }
   }
 }, {
   timestamps: true,
