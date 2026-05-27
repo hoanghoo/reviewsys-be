@@ -37,6 +37,7 @@ exports.updateTeam = async (req, res) => {
 };
 
 exports.assignLeader = async (req, res) => {
+  console.log("assignLeader req.body:", JSON.stringify(req.body, null, 2));
   try {
     const { id } = req.params;
     const { userId, users } = req.body;
@@ -53,7 +54,7 @@ exports.assignLeader = async (req, res) => {
 
       for (const u of users) {
         await User.update(
-          { position: u.position, roles: u.roles },
+          { position: u.position, roles: u.roles, managedTeamIds: u.managedTeamIds },
           { where: { id: u.id, teamId: id } }
         );
       }

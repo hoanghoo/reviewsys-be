@@ -114,6 +114,7 @@ const createUser = async (req, res) => {
 };
 
 const updateUser = async (req, res) => {
+  console.log("updateUser req.body:", JSON.stringify(req.body, null, 2));
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });

@@ -5,8 +5,15 @@ const fs = require('fs');
 
 const submitPersonalReview = async (req, res) => {
   try {
-    const { reviewPeriodId, templateId, feedback, score } = req.body;
+    let { reviewPeriodId, templateId, feedback, score } = req.body;
     const userId = req.user.id; // From verifyToken middleware
+    
+    // Handle FormData parsing
+    if (typeof feedback === 'string') {
+      try { feedback = JSON.parse(feedback); } catch(e) {}
+    }
+
+    const attachmentFile = req.file ? req.file.filename : null;
 
     // Check if the review period is open
     const period = await ReviewPeriod.findByPk(reviewPeriodId);
@@ -34,16 +41,22 @@ const submitPersonalReview = async (req, res) => {
         try { historyArr = JSON.parse(existingReview.history); } catch(e) {}
       }
       historyArr.push(newHistoryEntry);
-
-      // Update existing
-      await existingReview.update({
+      
+      const updateData = {
         templateId,
         feedback: JSON.stringify(feedback),
         score,
         selfScore: score,
         status: 'Submitted',
         history: JSON.stringify(historyArr)
-      });
+      };
+      
+      if (attachmentFile) {
+        updateData.attachmentFile = attachmentFile;
+      }
+
+      // Update existing
+      await existingReview.update(updateData);
       return res.status(200).json(existingReview);
     } else {
       // Create new
@@ -56,7 +69,8 @@ const submitPersonalReview = async (req, res) => {
         score,
         selfScore: score,
         status: 'Submitted',
-        history: JSON.stringify([newHistoryEntry])
+        history: JSON.stringify([newHistoryEntry]),
+        attachmentFile
       });
       return res.status(201).json(review);
     }
@@ -215,8 +229,12 @@ const approveReview = async (req, res) => {
     const manager = await User.findByPk(req.user.id);
     const reviewee = await User.findByPk(review.revieweeId);
 
-    if (!manager.roles.includes("Admin") && manager.departmentId !== reviewee.departmentId) {
-      return res.status(403).json({ message: 'Không có quyền duyệt bản đánh giá này' });
+    if (manager.departmentId !== reviewee.departmentId) {
+      return res.status(403).json({ message: 'Không có quyền duyệt bản đánh giá của đơn vị khác' });
+    }
+
+    if (!manager.roles.includes("Manager") && !manager.roles.includes("Leader")) {
+      return res.status(403).json({ message: 'Quản trị viên chỉ có quyền xem, không có quyền duyệt' });
     }
 
     const newStatus = status || 'ManagerReviewed';
@@ -1153,7 +1171,45 @@ function clearCell(doc, tc) {
   tc.appendChild(p);
 }
 
-module.exports = { 
+
+const downloadAttachment = async (req, res) => {
+  try {
+    const reviewId = req.params.id;
+    const review = await Review.findByPk(reviewId, {
+      include: [
+        { model: User, as: 'Reviewee', include: [{ model: Team }] },
+        { model: ReviewPeriod }
+      ]
+    });
+
+    if (!review || !review.attachmentFile) {
+      return res.status(404).json({ message: 'Không tìm thấy file đính kèm' });
+    }
+
+    const filePath = path.join(__dirname, '../../uploads', review.attachmentFile);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: 'File đính kèm không còn tồn tại trên hệ thống' });
+    }
+
+    const removeAccents = (str) => {
+      return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+    };
+
+    const periodName = review.ReviewPeriod ? review.ReviewPeriod.name.replace(/\s+/g, '_') : 'KyDanhGia';
+    const teamName = (review.Reviewee && review.Reviewee.Team) ? review.Reviewee.Team.shortName.replace(/\s+/g, '_') : 'Doi';
+    const userName = review.Reviewee ? removeAccents(review.Reviewee.fullName).replace(/\s+/g, '_') : 'NhanSu';
+
+    const ext = path.extname(review.attachmentFile);
+    const newFileName = `${periodName}_${teamName}_${userName}_Document${ext}`;
+
+    res.download(filePath, newFileName);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = {
+  downloadAttachment, 
   submitPersonalReview,
   getTeamReviews,
   approveReview,

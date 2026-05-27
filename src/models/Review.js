@@ -42,6 +42,10 @@ const Review = sequelize.define('Review', {
   history: {
     type: DataTypes.TEXT,
     allowNull: true,
+  },
+  attachmentFile: {
+    type: DataTypes.STRING,
+    allowNull: true,
   }
 }, {
   timestamps: true,
