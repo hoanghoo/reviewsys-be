@@ -5,7 +5,7 @@ const { verifyToken } = require('../middlewares/authMiddleware');
 const { authorizeRole } = require('../middlewares/roleMiddleware');
 
 router.use(verifyToken);
-router.use(authorizeRole('Admin'));
+router.use(authorizeRole('Admin', 'Leader'));
 
 router.get('/', teamController.getTeams);
 router.post('/', teamController.createTeam);

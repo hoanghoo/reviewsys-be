@@ -3,11 +3,11 @@ const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 
 
-const calculateRoles = (inputRoles, position, teamId, isLeadershipTeam) => {
+const calculateRoles = (inputRoles, position, teamId, isLeadershipTeam, isTeam1) => {
   const rolesSet = new Set(Array.isArray(inputRoles) ? inputRoles : [inputRoles || "Employee"]);
   
-  // Everyone should probably be at least Employee unless strictly only Admin
-  if (rolesSet.size === 0) rolesSet.add("Employee");
+  // Everyone should be at least Employee
+  rolesSet.add("Employee");
 
   // 1. Nếu thuộc ban lãnh đạo => role: lãnh đạo
   if (isLeadershipTeam) {
@@ -15,12 +15,12 @@ const calculateRoles = (inputRoles, position, teamId, isLeadershipTeam) => {
   }
 
   // 2. Nếu là đội trưởng/đội phó => chỉ huy đội (Manager)
-  if (position === 'Đội trưởng' || position === 'Phó đội trưởng' || position === 'Đội phó') {
+  if (position === 'Đội trưởng' || position === 'Đội phó') {
     rolesSet.add("Manager");
   }
 
   // 3. Nếu thuộc đội 1 => thêm role: quản trị viên vào role hiện có
-  if (teamId === 1 || teamId === '1') {
+  if (teamId === 1 || teamId === '1' || isTeam1) {
     rolesSet.add("Admin");
   }
 
@@ -38,7 +38,7 @@ const getAllUsers = async (req, res) => {
     });
     const usersJSON = users.map(u => {
       const json = u.toJSON();
-      if (json.teamId === 1) {
+      if (json.teamId === 1 || (u.Team && u.Team.shortName === 'Đội 1')) {
         if (!json.roles) json.roles = []; if (!json.roles.includes("Admin")) json.roles.push("Admin");
       } else if (json.teamId === 7 || (u.Team && u.Team.shortName === 'Ban Lãnh đạo')) {
         if (!json.roles) json.roles = []; if (!json.roles.includes("Leader")) json.roles.push("Leader");
@@ -57,15 +57,19 @@ const createUser = async (req, res) => {
     
     // Check if team is Ban Lãnh đạo
     let isLeadershipTeam = false;
+    let isTeam1 = false;
     if (teamId) {
       const team = await Team.findByPk(teamId);
       if (team && (team.shortName === 'Ban Lãnh đạo' || team.id === 7)) {
         isLeadershipTeam = true;
       }
+      if (team && (team.shortName === 'Đội 1' || team.id === 1)) {
+        isTeam1 = true;
+      }
     }
 
     if (isLeadershipTeam) {
-      if (position === 'Đội trưởng' || position === 'Phó đội trưởng' || position === 'Đội phó') {
+      if (position === 'Đội trưởng' || position === 'Đội phó') {
         return res.status(400).json({ message: 'Ban Lãnh đạo không có chức vụ Đội trưởng hoặc Đội phó' });
       }
     }
@@ -78,24 +82,21 @@ const createUser = async (req, res) => {
       }
     }
 
-    // Enforce 1 Commander, 1 Deputy Rule for regular teams
-    if (teamId && !isLeadershipTeam && (position === 'Đội trưởng' || position === 'Phó đội trưởng' || position === 'Đội phó')) {
-      const posCheck = (position === 'Phó đội trưởng' || position === 'Đội phó')
-        ? ['Phó đội trưởng', 'Đội phó']
-        : [position];
+    // Enforce 1 Commander Rule for regular teams (can have multiple Deputy Commanders)
+    if (teamId && !isLeadershipTeam && position === 'Đội trưởng') {
       const existing = await User.findOne({
         where: {
           teamId,
-          position: { [Op.in]: posCheck }
+          position: 'Đội trưởng'
         }
       });
       if (existing) {
-        return res.status(400).json({ message: `Đội này đã có ${position} (${existing.fullName})` });
+        return res.status(400).json({ message: `Đội này đã có Đội trưởng (${existing.fullName})` });
       }
     }
 
     const hashedPassword = bcrypt.hashSync(password, 8);
-    const dbRoles = calculateRoles(req.body.roles, position, teamId, isLeadershipTeam);
+    const dbRoles = calculateRoles(req.body.roles, position, teamId, isLeadershipTeam, isTeam1);
     const user = await User.create({
       username, password: hashedPassword, fullName, roles: dbRoles, departmentId, rank, position, teamId, managedTeamIds
     });
@@ -110,6 +111,7 @@ const createUser = async (req, res) => {
 };
 
 const updateUser = async (req, res) => {
+  console.log("updateUser req.body:", JSON.stringify(req.body, null, 2));
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -118,15 +120,19 @@ const updateUser = async (req, res) => {
     
     // Check if team is Ban Lãnh đạo
     let isLeadershipTeam = false;
+    let isTeam1 = false;
     if (teamId) {
       const team = await Team.findByPk(teamId);
       if (team && (team.shortName === 'Ban Lãnh đạo' || team.id === 7)) {
         isLeadershipTeam = true;
       }
+      if (team && (team.shortName === 'Đội 1' || team.id === 1)) {
+        isTeam1 = true;
+      }
     }
 
     if (isLeadershipTeam) {
-      if (position === 'Đội trưởng' || position === 'Phó đội trưởng' || position === 'Đội phó') {
+      if (position === 'Đội trưởng' || position === 'Đội phó') {
         return res.status(400).json({ message: 'Ban Lãnh đạo không có chức vụ Đội trưởng hoặc Đội phó' });
       }
     }
@@ -144,20 +150,17 @@ const updateUser = async (req, res) => {
       }
     }
 
-    // Enforce 1 Commander, 1 Deputy Rule for regular teams
-    if (teamId && !isLeadershipTeam && (position === 'Đội trưởng' || position === 'Phó đội trưởng' || position === 'Đội phó')) {
-      const posCheck = (position === 'Phó đội trưởng' || position === 'Đội phó')
-        ? ['Phó đội trưởng', 'Đội phó']
-        : [position];
+    // Enforce 1 Commander Rule for regular teams (can have multiple Deputy Commanders)
+    if (teamId && !isLeadershipTeam && position === 'Đội trưởng') {
       const existing = await User.findOne({ 
         where: { 
           teamId, 
-          position: { [Op.in]: posCheck },
+          position: 'Đội trưởng',
           id: { [Op.ne]: user.id } // Exclude current user
         } 
       });
       if (existing) {
-        return res.status(400).json({ message: `Đội này đã có ${position} (${existing.fullName})` });
+        return res.status(400).json({ message: `Đội này đã có Đội trưởng (${existing.fullName})` });
       }
     }
 
@@ -170,7 +173,7 @@ const updateUser = async (req, res) => {
     await user.update(updateData);
     
     const userWithoutPassword = user.toJSON();
-    if (userWithoutPassword.teamId === 1) {
+    if (userWithoutPassword.teamId === 1 || (teamId && isTeam1)) {
       if (!userWithoutPassword.roles) userWithoutPassword.roles = []; if (!userWithoutPassword.roles.includes("Admin")) userWithoutPassword.roles.push("Admin");
     } else if (userWithoutPassword.teamId === 7) {
       if (!userWithoutPassword.roles) userWithoutPassword.roles = []; if (!userWithoutPassword.roles.includes("Leader")) userWithoutPassword.roles.push("Leader");
@@ -213,7 +216,7 @@ const getProfile = async (req, res) => {
     }
     
     if (user.teamId) {
-      // Prioritize Đội trưởng over Phó đội trưởng
+      // Prioritize Đội trưởng over Đội phó
       let manager = await User.findOne({
         where: { teamId: user.teamId, position: 'Đội trưởng' },
         attributes: ['fullName']
@@ -221,7 +224,7 @@ const getProfile = async (req, res) => {
 
       if (!manager) {
         manager = await User.findOne({
-          where: { teamId: user.teamId, position: 'Phó đội trưởng' },
+          where: { teamId: user.teamId, position: 'Đội phó' },
           attributes: ['fullName']
         });
       }
@@ -334,7 +337,7 @@ const VALID_POSITIONS = [
   'Trưởng phòng',
   'Phó phòng',
   'Đội trưởng',
-  'Phó đội trưởng',
+  'Đội phó',
   'Cán bộ'
 ];
 
@@ -412,7 +415,7 @@ const importTemplate = async (req, res) => {
     guideSheet.addRow(['Cấp bậc', VALID_RANKS.join(', ')]);
     guideSheet.addRow(['Chức vụ', VALID_POSITIONS.join(', ')]);
     guideSheet.addRow(['Đội', teamNames.join(', ')]);
-    guideSheet.addRow(['Ràng buộc Chức vụ', 'Trưởng phòng và Phó phòng bắt buộc thuộc Ban Lãnh đạo. Đội trưởng, Phó đội trưởng và Cán bộ KHÔNG thuộc Ban Lãnh đạo.']);
+    guideSheet.addRow(['Ràng buộc Chức vụ', 'Trưởng phòng và Phó phòng bắt buộc thuộc Ban Lãnh đạo. Đội trưởng, Đội phó và Cán bộ KHÔNG thuộc Ban Lãnh đạo.']);
     
     guideSheet.eachRow((row, rNum) => {
       if (rNum === 1) return;
@@ -605,7 +608,7 @@ const importSubmit = async (req, res) => {
 
       const hashedPassword = bcrypt.hashSync(u.password, 8);
 
-      let roles = calculateRoles(["Employee"], u.position, u.teamId, u.teamName === 'Ban Lãnh đạo');
+      let roles = calculateRoles(["Employee"], u.position, u.teamId, u.teamName === 'Ban Lãnh đạo', u.teamName === 'Đội 1');
 
       const newUser = await User.create({
         username: finalUsername,

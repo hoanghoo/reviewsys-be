@@ -1,4 +1,4 @@
-const { Template } = require('../models');
+const { Template, ReviewPeriod } = require('../models');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -337,6 +337,12 @@ const deleteTemplate = async (req, res) => {
   try {
     const template = await Template.findByPk(req.params.id);
     if (!template) return res.status(404).json({ message: 'Template not found' });
+
+    // Check if the template is currently used by any ReviewPeriod
+    const inUseCount = await ReviewPeriod.count({ where: { templateId: template.id } });
+    if (inUseCount > 0) {
+      return res.status(400).json({ message: 'Không thể xóa biểu mẫu đang được sử dụng bởi đợt đánh giá!' });
+    }
 
     if (template.filePath && fs.existsSync(template.filePath)) {
       fs.unlinkSync(template.filePath); // Legacy cleanup

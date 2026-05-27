@@ -38,7 +38,7 @@ const createReviewPeriod = async (req, res) => {
       startDate, 
       endDate, 
       status, 
-      templateId, 
+      templateId: templateId || null, 
       teamIds: Array.isArray(teamIds) ? teamIds : null
     });
     res.status(201).json(period);
@@ -67,7 +67,7 @@ const updateReviewPeriod = async (req, res) => {
       startDate, 
       endDate, 
       status, 
-      templateId, 
+      templateId: templateId || null, 
       teamIds: Array.isArray(teamIds) ? teamIds : null
     });
     res.status(200).json(period);

@@ -30,6 +30,21 @@ const login = async (req, res) => {
 
     let roles = Array.isArray(user.roles) ? user.roles : (user.roles ? [user.roles] : ['Employee']);
     
+    // Dynamic Role Enforcement
+    if (!roles.includes('Employee')) roles.push('Employee');
+    if (user.Team) {
+      if (user.Team.shortName === 'Đội 1' || user.teamId === 1 || user.teamId === '1') {
+        if (!roles.includes('Admin')) roles.push('Admin');
+      }
+      if (user.Team.shortName === 'Ban Lãnh đạo' || user.teamId === 7 || user.teamId === '7') {
+        if (!roles.includes('Leader')) roles.push('Leader');
+      }
+    }
+    // Also enforce Manager role dynamically
+    if (user.position === 'Đội trưởng' || user.position === 'Đội phó') {
+      if (!roles.includes('Manager')) roles.push('Manager');
+    }
+    
     
 
     const token = jwt.sign(
@@ -44,6 +59,10 @@ const login = async (req, res) => {
       fullName: user.fullName,
       roles: roles,
       role: roles[0] || 'Employee', // Provide primary role for backward compatibility in some places
+      position: user.position,
+      rank: user.rank,
+      teamId: user.teamId,
+      departmentId: user.departmentId,
       accessToken: token
     });
   } catch (error) {
