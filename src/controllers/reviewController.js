@@ -108,7 +108,11 @@ const getTeamReviews = async (req, res) => {
     }
 
     // Filter by Team/Dept
-    if (manager.roles.includes("Manager")) {
+    if (manager.roles.includes("Admin")) {
+      if (teamId && teamId !== 'all') {
+        userWhere.teamId = teamId;
+      }
+    } else if (manager.roles.includes("Manager")) {
       if (manager.position === 'Trưởng phòng') {
         if (teamId && teamId !== 'all') {
           userWhere.teamId = teamId;
@@ -237,6 +241,21 @@ const approveReview = async (req, res) => {
       return res.status(403).json({ message: 'Quản trị viên chỉ có quyền xem, không có quyền duyệt' });
     }
 
+    // Strict role-based permission checks
+    if (manager.roles.includes("Leader") || manager.position === 'Trưởng phòng') {
+      // Can approve anyone in the department (OK)
+    } else if (manager.position === 'Phó trưởng phòng' || manager.position === 'Phó phòng') {
+      const managed = Array.isArray(manager.managedTeamIds) ? manager.managedTeamIds : [];
+      if (!managed.includes(reviewee.teamId)) {
+        return res.status(403).json({ message: 'Bạn không được phân công phụ trách đội này nên không có quyền duyệt' });
+      }
+    } else {
+      // Đội trưởng, Đội phó or other managers
+      if (manager.teamId !== reviewee.teamId) {
+        return res.status(403).json({ message: 'Không có quyền duyệt thành viên của đội khác' });
+      }
+    }
+
     const newStatus = status || 'ManagerReviewed';
     let historyArr = [];
     if (review.history) {
@@ -280,7 +299,11 @@ const exportTeamExcel = async (req, res) => {
     }
 
     let userWhere = {};
-    if (manager.roles.includes("Manager")) {
+    if (manager.roles.includes("Admin")) {
+      if (teamId && teamId !== 'all') {
+        userWhere.teamId = teamId;
+      }
+    } else if (manager.roles.includes("Manager")) {
       if (manager.position === 'Trưởng phòng') {
         if (teamId && teamId !== 'all') {
           userWhere.teamId = teamId;
@@ -303,7 +326,7 @@ const exportTeamExcel = async (req, res) => {
           userWhere.departmentId = manager.departmentId;
         }
       }
-    } else if (manager.roles.includes("Admin") || manager.roles.includes("Leader")) {
+    } else if (manager.roles.includes("Leader")) {
       if (teamId && teamId !== 'all') {
         userWhere.teamId = teamId;
       }
